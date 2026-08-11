@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% from "partials/confirm.html" import confirm_dialog %}
+{% block title %}Reservations · {{ app_name }}{% endblock %}
+{% block breadcrumb %}Reservations{% endblock %}
+{% block heading %}Reservations{% endblock %}
+
+{% block content %}
+<div x-data="reservationsPage()" x-init="boot()" class="space-y-5">
+
+  {# --------------------------------------------------------- filter bar #}
+  <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div class="relative lg:col-span-2">
+        <svg class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+             fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>
+        </svg>
+        <input type="search" x-model.debounce.350ms="filters.q" @input="page = 1; load()"
+               placeholder="Reference, guest, phone or room…"
+               class="w-full rounded-xl border-slate-300 py-2.5 pl-10 pr-3 text-sm
+                      dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+      </div>
+
+      <select x-model="filters.status" @change="page = 1; load()"
+              class="rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+        <option value="">Any status</option>
+        <option value="pending">Pending</option>
+        <option value="confirmed">Confirmed</option>
+        <option value="checked_in">Checked in</option>
+        <option value="checked_out">Checked out</option>
+        <option value="cancelled">Cancelled</option>
+        <option value="no_show">No show</option>
+      </select>
+
+      <input type="date" x-model="filters.date_from" @change="page = 1; load()" title="Stays from"
+             class="rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+      <input type="date" x-model="filters.date_to" @change="page = 1; load()" title="Stays to"
+             class="rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+    </div>
+
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <template x-for="preset in presets" :key="preset.label">
+        <button @click="applyPreset(preset)"
+                class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600
+                       transition hover:border-brand-400 hover:text-brand-700 dark:border-slate-700
+                       dark:text-slate-300 dark:hover:text-brand-300" x-text="preset.label"></button>
+      </template>
+      <button @click="reset()" class="ml-auto text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+        Reset
+      </button>
+    </div>
+  </div>
+
+  {# ------------------------------------------------------------- results #}
+  <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3.5 dark:border-slate-800">
+      <p class="text-sm font-semibold text-slate-900 dark:text-white">
+        <span x-text="total"></span> reservation<span x-show="total !== 1">s</span>
+      </p>
+      <a href="/reservations/new"
+         class="flex items-center gap-1.5 rounded-xl bg-accent-500 px-3.5 py-2 text-xs font-semibold text-white
+                transition hover:bg-accent-600">
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        New booking
+      </a>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[860px] text-sm">
+        <thead class="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50">
+          <tr class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th class="px-5 py-3">Reference</th>
+            <th class="px-5 py-3">Guest</th>
+            <th class="px-5 py-3">Room</th>
+            <th class="px-5 py-3">Stay</th>
+            <th class="px-5 py-3">Status</th>
+            <th class="px-5 py-3 text-right">Total</th>
+            <th class="px-5 py-3 text-right">Actions</th>
+          </tr>
+        </thead>
+
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+          <template x-if="loading">
+            <tr><td colspan="7" class="p-5">
+              <div class="space-y-3">
+                <div class="skeleton h-4 w-full"></div><div class="skeleton h-4 w-5/6"></div><div class="skeleton h-4 w-3/4"></div>
+              </div>
+            </td></tr>
+          </template>
+
+          <template x-if="!loading && !items.length">
+            <tr><td colspan="7">
+              <div class="flex flex-col items-center px-5 py-16 text-center">
+                <div class="grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 dark:bg-slate-800">
+                  <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                    <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>
+                  </svg>
+                </div>
+                <p class="mt-4 text-sm font-semibold text-slate-700 dark:text-slate-200">No reservations found</p>
+                <p class="mt-1 max-w-xs text-xs text-slate-500">Adjust the filters, or create a new booking.</p>
+                <a href="/reservations/new" class="mt-4 rounded-xl bg-brand-700 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600">
+                  New booking
+                </a>
+              </div>
+            </td></tr>
+          </template>
+
+          <template x-for="r in items" :key="r.id">
+            <tr class="transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
+              <td class="px-5 py-3.5 font-mono text-xs text-slate-600 dark:text-slate-400" x-text="r.reference"></td>
+              <td class="px-5 py-3.5">
+                <p class="truncate font-medium text-slate-900 dark:text-white" x-text="r.guest.full_name"></p>
+                <p class="truncate text-xs text-slate-500" x-text="r.guest.phone"></p>
+              </td>
+              <td class="px-5 py-3.5">
+                <p class="font-semibold text-slate-900 dark:text-white" x-text="r.room.room_number"></p>
+                <p class="truncate text-xs text-slate-500" x-text="r.room.room_type.name"></p>
+              </td>
+              <td class="px-5 py-3.5">
+                <p class="whitespace-nowrap text-slate-700 dark:text-slate-300"
+                   x-text="`${fmt.dateShort(r.check_in_date)} → ${fmt.dateShort(r.check_out_date)}`"></p>
+                <p class="text-xs text-slate-500" x-text="`${r.nights} night(s) · ${r.adults + r.children} guest(s)`"></p>
+              </td>
+              <td class="px-5 py-3.5">
+                <span class="whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                      :class="badgeClass(r.status)" x-text="fmt.titleCase(r.status)"></span>
+              </td>
+              <td class="px-5 py-3.5 text-right font-semibold text-slate-900 dark:text-white" x-text="fmt.money(r.total_price)"></td>
+              <td class="px-5 py-3.5">
+                <div class="flex justify-end gap-1.5">
+                  <button x-show="['pending','confirmed'].includes(r.status)" @click="checkIn(r)"
+                          class="whitespace-nowrap rounded-lg bg-accent-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-accent-600">
+                    Check in
+                  </button>
+                  <a x-show="r.status === 'checked_in'" :href="`/front-desk?ref=${r.reference}`"
+                     class="whitespace-nowrap rounded-lg bg-brand-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-600">
+                    Check out
+                  </a>
+                  <a :href="`/api/v1/invoices/reservation/${r.id}/pdf`" target="_blank"
+                     x-show="['checked_in','checked_out'].includes(r.status)"
+                     class="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600
+                            hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                    Invoice
+                  </a>
+                  <button x-show="!['cancelled','checked_out'].includes(r.status)" @click="cancel(r)"
+                          class="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600
+                                 hover:bg-red-50 dark:border-red-500/30 dark:hover:bg-red-500/10">
+                    Cancel
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <div x-show="!loading && total > size" style="display:none"
+         class="flex items-center justify-between border-t border-slate-200 px-5 py-3 dark:border-slate-800">
+      <p class="text-xs text-slate-500">
+        Page <span x-text="page"></span> of <span x-text="Math.ceil(total / size)"></span>
+      </p>
+      <div class="flex gap-1.5">
+        <button @click="page--; load()" :disabled="page === 1"
+                class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium disabled:opacity-40
+                       dark:border-slate-700 dark:text-slate-300">Previous</button>
+        <button @click="page++; load()" :disabled="page * size >= total"
+                class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium disabled:opacity-40
+                       dark:border-slate-700 dark:text-slate-300">Next</button>
+      </div>
+    </div>
+  </div>
+
+  {{ confirm_dialog() }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function reservationsPage() {
+  return {
+    ...confirmMixin(),
+    loading: true,
+    items: [],
+    total: 0,
+    page: 1,
+    size: 20,
+    filters: { q: '', status: '', date_from: '', date_to: '' },
+
+    get presets() {
+      const today = window.APP.today;
+      return [
+        { label: 'Arriving today', patch: { status: 'confirmed', date_from: today, date_to: today } },
+        { label: 'In house', patch: { status: 'checked_in', date_from: '', date_to: '' } },
+        { label: 'This month', patch: { status: '', date_from: today.slice(0, 8) + '01', date_to: '' } },
+        { label: 'Cancelled', patch: { status: 'cancelled', date_from: '', date_to: '' } },
+      ];
+    },
+
+    boot() {
+      // Deep links from other pages, e.g. /reservations?status=checked_in
+      const params = new URLSearchParams(window.location.search);
+      ['q', 'status', 'date_from', 'date_to'].forEach((key) => {
+        if (params.get(key)) this.filters[key] = params.get(key);
+      });
+      this.load();
+    },
+
+    async load() {
+      this.loading = true;
+      try {
+        const result = await api('/api/v1/reservations', {
+          params: {
+            q: this.filters.q.trim() || null,
+            status: this.filters.status || null,
+            date_from: this.filters.date_from || null,
+            date_to: this.filters.date_to || null,
+            page: this.page,
+            size: this.size,
+          },
+        });
+        this.items = result.items;
+        this.total = result.total;
+      } catch (err) {
+        toastError('Could not load reservations', err.message);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    applyPreset(preset) {
+      Object.assign(this.filters, { q: '' }, preset.patch);
+      this.page = 1;
+      this.load();
+    },
+
+    reset() {
+      this.filters = { q: '', status: '', date_from: '', date_to: '' };
+      this.page = 1;
+      this.load();
+    },
+
+    async checkIn(reservation) {
+      try {
+        await api(`/api/v1/reservations/${reservation.id}/check-in`, { method: 'POST' });
+        toastSuccess('Checked in', `${reservation.guest.full_name} → room ${reservation.room.room_number}`);
+        await this.load();
+      } catch (err) {
+        toastError('Check-in failed', err.message);
+      }
+    },
+
+    async cancel(reservation) {
+      const ok = await this.askConfirm(
+        'Cancel this reservation?',
+        `${reservation.guest.full_name} · ${reservation.reference}. The room becomes available to other guests.`,
+        { confirmLabel: 'Cancel booking' }
+      );
+      if (!ok) return;
+      try {
+        await api(`/api/v1/reservations/${reservation.id}/cancel`, {
+          method: 'POST', body: { reason: 'Cancelled by staff' },
+        });
+        toastSuccess('Reservation cancelled', reservation.reference);
+        await this.load();
+      } catch (err) {
+        toastError('Could not cancel', err.message);
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

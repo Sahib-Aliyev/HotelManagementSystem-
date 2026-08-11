@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Sign in · {{ app_name }}{% endblock %}
+
+{% block auth_content %}
+<div class="flex min-h-full">
+
+  {# ---------------------------------------------------- brand panel #}
+  <div class="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-brand-700 p-12 lg:flex">
+    <div class="absolute inset-0 opacity-30"
+         style="background-image:
+           radial-gradient(circle at 20% 20%, #4f5fd7 0%, transparent 45%),
+           radial-gradient(circle at 80% 70%, #10B981 0%, transparent 40%);"></div>
+
+    <div class="relative flex items-center gap-3">
+      <div class="grid h-11 w-11 place-items-center rounded-xl bg-white/15 text-sm font-bold text-white backdrop-blur">GA</div>
+      <span class="text-lg font-semibold text-white">{{ app_name }}</span>
+    </div>
+
+    <div class="relative max-w-md">
+      <h2 class="text-4xl font-bold leading-tight text-white">
+        Every arrival,<br>handled with care.
+      </h2>
+      <p class="mt-5 text-base leading-relaxed text-brand-100">
+        Register guests, assign rooms and settle accounts from a single console —
+        with double bookings made impossible by design.
+      </p>
+
+      <dl class="mt-10 grid grid-cols-3 gap-6">
+        {% for value, label in [('0', 'Double bookings'), ('<30s', 'Average check-in'), ('24/7', 'Front desk ready')] %}
+        <div>
+          <dt class="text-2xl font-bold text-white">{{ value }}</dt>
+          <dd class="mt-1 text-xs uppercase tracking-wide text-brand-200">{{ label }}</dd>
+        </div>
+        {% endfor %}
+      </dl>
+    </div>
+
+    <p class="relative text-xs text-brand-200">© 2026 {{ app_name }}. Guest Management System.</p>
+  </div>
+
+  {# --------------------------------------------------------- form #}
+  <div class="flex w-full items-center justify-center p-6 lg:w-1/2">
+    <div x-data="loginForm()" class="w-full max-w-sm animate-fade-up">
+
+      <div class="mb-8 flex items-center gap-3 lg:hidden">
+        <div class="grid h-10 w-10 place-items-center rounded-xl bg-brand-700 text-sm font-bold text-white">GA</div>
+        <span class="text-base font-semibold text-slate-900 dark:text-white">{{ app_name }}</span>
+      </div>
+
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Welcome back</h1>
+      <p class="mt-2 text-sm text-slate-500">Sign in to the front-office console.</p>
+
+      <form @submit.prevent="submit()" class="mt-8 space-y-4">
+        <div>
+          <label for="email" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
+          <input id="email" type="email" x-model="email" autocomplete="email" required
+                 @input="errors.email = ''"
+                 class="mt-1.5 w-full rounded-xl border-slate-300 bg-white px-3.5 py-2.5 text-sm shadow-sm
+                        transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-brand-500
+                        dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                 :class="errors.email && 'border-red-400 focus:border-red-500 focus:ring-red-500'"
+                 placeholder="you@grandaurora.az">
+          <p x-show="errors.email" x-text="errors.email" class="mt-1.5 text-xs text-red-600" style="display:none"></p>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between">
+            <label for="password" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
+            <button type="button" @click="show = !show" class="text-xs font-medium text-brand-600 hover:text-brand-500"
+                    x-text="show ? 'Hide' : 'Show'"></button>
+          </div>
+          <input id="password" :type="show ? 'text' : 'password'" x-model="password"
+                 autocomplete="current-password" required @input="errors.password = ''"
+                 class="mt-1.5 w-full rounded-xl border-slate-300 bg-white px-3.5 py-2.5 text-sm shadow-sm
+                        transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-brand-500
+                        dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                 :class="errors.password && 'border-red-400 focus:border-red-500 focus:ring-red-500'"
+                 placeholder="••••••••">
+          <p x-show="errors.password" x-text="errors.password" class="mt-1.5 text-xs text-red-600" style="display:none"></p>
+        </div>
+
+        <div x-show="formError" style="display:none"
+             class="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3
+                    dark:border-red-500/30 dark:bg-red-500/10">
+          <svg class="mt-0.5 h-4 w-4 shrink-0 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M12 8v5m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <p class="text-xs text-red-700 dark:text-red-300" x-text="formError"></p>
+        </div>
+
+        <button type="submit" :disabled="loading"
+                class="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-700 px-4 py-2.5
+                       text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600
+                       disabled:cursor-not-allowed disabled:opacity-60">
+          <svg x-show="loading" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" style="display:none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+          </svg>
+          <span x-text="loading ? 'Signing in…' : 'Sign in'"></span>
+        </button>
+      </form>
+
+      <div class="mt-8 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Demo accounts</p>
+        <div class="mt-3 space-y-2">
+          {% for label, email, pwd in [
+            ('Administrator', 'admin@grandaurora.az', 'Admin1234'),
+            ('Manager', 'manager@grandaurora.az', 'Manager1234'),
+            ('Receptionist', 'reception@grandaurora.az', 'Reception1234')
+          ] %}
+          <button type="button" @click="fill('{{ email }}', '{{ pwd }}')"
+                  class="flex w-full items-center justify-between rounded-lg bg-white px-3 py-2 text-left
+                         text-xs shadow-sm transition hover:ring-2 hover:ring-brand-500/40 dark:bg-slate-800">
+            <span class="font-medium text-slate-700 dark:text-slate-200">{{ label }}</span>
+            <span class="font-mono text-slate-400">{{ email }}</span>
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function loginForm() {
+  return {
+    email: '', password: '', show: false, loading: false, formError: '',
+    errors: { email: '', password: '' },
+
+    fill(email, password) {
+      this.email = email;
+      this.password = password;
+      this.formError = '';
+      this.errors = { email: '', password: '' };
+    },
+
+    validate() {
+      this.errors = { email: '', password: '' };
+      if (!this.email.includes('@')) this.errors.email = 'Enter a valid email address.';
+      if (this.password.length < 1) this.errors.password = 'Enter your password.';
+      return !this.errors.email && !this.errors.password;
+    },
+
+    async submit() {
+      this.formError = '';
+      if (!this.validate()) return;
+      this.loading = true;
+      try {
+        await api('/api/v1/auth/login', {
+          method: 'POST',
+          body: { email: this.email, password: this.password },
+        });
+        // Only follow same-site paths — an absolute or protocol-relative
+        // "next" would otherwise let this become an open redirect.
+        const requested = new URLSearchParams(window.location.search).get('next') || '/';
+        const next = requested.startsWith('/') && !requested.startsWith('//') ? requested : '/';
+        window.location.href = next;
+      } catch (err) {
+        this.formError = err.message;
+        this.loading = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

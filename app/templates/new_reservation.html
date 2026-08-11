@@ -1,0 +1,585 @@
+{% extends "base.html" %}
+{% block title %}New booking · {{ app_name }}{% endblock %}
+{% block breadcrumb %}Reservations / New{% endblock %}
+{% block heading %}Create a booking{% endblock %}
+
+{% block content %}
+<div x-data="bookingWizard()" x-init="boot()" class="mx-auto max-w-5xl space-y-5">
+
+  {# ------------------------------------------------------------- stepper #}
+  <ol class="flex items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4
+             shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <template x-for="(s, i) in steps" :key="s.key">
+      <li class="flex flex-1 items-center gap-2.5">
+        <button @click="i < step && (step = i)" :disabled="i > step"
+                class="flex min-w-0 items-center gap-2.5 text-left transition disabled:cursor-not-allowed">
+          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold transition"
+                :class="i < step ? 'bg-accent-500 text-white'
+                        : i === step ? 'bg-brand-700 text-white ring-4 ring-brand-700/15'
+                        : 'bg-slate-100 text-slate-400 dark:bg-slate-800'">
+            <svg x-show="i < step" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" style="display:none">
+              <path d="M20 6L9 17l-5-5"/>
+            </svg>
+            <span x-show="i >= step" x-text="i + 1"></span>
+          </span>
+          <span class="hidden min-w-0 sm:block">
+            <span class="block truncate text-xs font-semibold"
+                  :class="i <= step ? 'text-slate-900 dark:text-white' : 'text-slate-400'" x-text="s.title"></span>
+            <span class="block truncate text-[11px] text-slate-400" x-text="s.hint"></span>
+          </span>
+        </button>
+        <span x-show="i < steps.length - 1" class="h-px flex-1 bg-slate-200 dark:bg-slate-700"></span>
+      </li>
+    </template>
+  </ol>
+
+  <div class="grid grid-cols-1 gap-5 lg:grid-cols-3">
+
+    {# ============================================================ main #}
+    <div class="space-y-5 lg:col-span-2">
+
+      {# ------------------------------------------------- step 1: guest #}
+      <section x-show="step === 0" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm
+                                          dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Who is staying?</h2>
+        <p class="mt-1 text-xs text-slate-500">Find a returning guest, or register a new one.</p>
+
+        <div class="mt-4 flex gap-1.5 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+          <button @click="guestMode = 'existing'"
+                  class="flex-1 rounded-lg py-2 text-xs font-semibold transition"
+                  :class="guestMode === 'existing' ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-900 dark:text-brand-200' : 'text-slate-500'">
+            Existing guest
+          </button>
+          <button @click="guestMode = 'new'"
+                  class="flex-1 rounded-lg py-2 text-xs font-semibold transition"
+                  :class="guestMode === 'new' ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-900 dark:text-brand-200' : 'text-slate-500'">
+            New guest
+          </button>
+        </div>
+
+        {# --- existing --- #}
+        <div x-show="guestMode === 'existing'" class="mt-4 space-y-3">
+          <div class="relative">
+            <svg class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                 fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>
+            </svg>
+            <input type="search" x-model.debounce.300ms="guestQuery" @input="searchGuests()"
+                   placeholder="Name, phone or document number…"
+                   class="w-full rounded-xl border-slate-300 py-2.5 pl-10 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          </div>
+
+          <div x-show="guestResults.length" style="display:none" class="max-h-72 space-y-1.5 overflow-y-auto">
+            <template x-for="g in guestResults" :key="g.id">
+              <button @click="pickGuest(g)"
+                      class="flex w-full items-center gap-3 rounded-xl border p-3 text-left transition"
+                      :class="selectedGuest?.id === g.id
+                        ? 'border-brand-500 bg-brand-50 dark:bg-brand-700/10'
+                        : 'border-slate-200 hover:border-slate-300 dark:border-slate-700'">
+                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-xs font-bold
+                             text-slate-600 dark:bg-slate-800 dark:text-slate-300" x-text="initials(g.full_name)"></span>
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm font-medium text-slate-900 dark:text-white" x-text="g.full_name"></span>
+                  <span class="block truncate text-xs text-slate-500" x-text="`${g.phone} · ${g.document_number}`"></span>
+                </span>
+                <svg x-show="selectedGuest?.id === g.id" class="h-5 w-5 shrink-0 text-brand-600" fill="none"
+                     stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="display:none">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+              </button>
+            </template>
+          </div>
+
+          <p x-show="guestQuery.length > 1 && !guestResults.length && !searchingGuests" style="display:none"
+             class="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500 dark:border-slate-700">
+            No guest matches that. Switch to <button @click="guestMode = 'new'" class="font-semibold text-brand-600 underline">New guest</button>.
+          </p>
+        </div>
+
+        {# --- new --- #}
+        <div x-show="guestMode === 'new'" style="display:none" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Full name *</label>
+            <input type="text" x-model="newGuest.full_name"
+                   class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Phone *</label>
+            <input type="tel" x-model="newGuest.phone" placeholder="+994 50 000 00 00"
+                   class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Email</label>
+            <input type="email" x-model="newGuest.email"
+                   class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Document type *</label>
+            <select x-model="newGuest.document_type"
+                    class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+              <option value="passport">Passport</option>
+              <option value="id_card">ID card</option>
+              <option value="driver_license">Driver licence</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Document number *</label>
+            <input type="text" x-model="newGuest.document_number"
+                   class="mt-1 w-full rounded-xl border-slate-300 py-2.5 font-mono text-sm uppercase
+                          dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Nationality</label>
+            <input type="text" x-model="newGuest.nationality" placeholder="Azerbaijan"
+                   class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          </div>
+        </div>
+      </section>
+
+      {# ------------------------------------------------- step 2: dates #}
+      <section x-show="step === 1" style="display:none"
+               class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="text-sm font-semibold text-slate-900 dark:text-white">When and for how many?</h2>
+        <p class="mt-1 text-xs text-slate-500">Availability is checked against the whole date range.</p>
+
+        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Check-in *</label>
+            <input type="date" x-model="stay.check_in_date" :min="window.APP.today" @change="onDateChange()"
+                   class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Check-out *</label>
+            <input type="date" x-model="stay.check_out_date" :min="minCheckOut" @change="onDateChange()"
+                   class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Adults *</label>
+            <input type="number" min="1" max="10" x-model.number="stay.adults"
+                   class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Children</label>
+            <input type="number" min="0" max="10" x-model.number="stay.children"
+                   class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <template x-for="n in [1, 2, 3, 7]" :key="n">
+            <button @click="setNights(n)"
+                    class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600
+                           transition hover:border-brand-400 hover:text-brand-700 dark:border-slate-700
+                           dark:text-slate-300" x-text="`${n} night${n > 1 ? 's' : ''}`"></button>
+          </template>
+        </div>
+
+        <div x-show="nights > 0" style="display:none"
+             class="mt-4 flex items-center gap-2 rounded-xl bg-brand-50 p-3 text-xs text-brand-800
+                    dark:bg-brand-700/10 dark:text-brand-200">
+          <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M12 16v-4m0-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span x-text="`${nights} night(s) · check-in from 14:00, check-out by 12:00`"></span>
+        </div>
+      </section>
+
+      {# ------------------------------------------------- step 3: room #}
+      <section x-show="step === 2" style="display:none"
+               class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Available rooms</h2>
+            <p class="mt-1 text-xs text-slate-500" x-text="`Free for the whole stay · sleeps ${stay.adults + stay.children}+`"></p>
+          </div>
+          <select x-model="roomTypeFilter" @change="findRooms()"
+                  class="rounded-xl border-slate-300 py-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+            <option value="">All room types</option>
+            {% for rt in room_types %}
+            <option value="{{ rt.id }}">{{ rt.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div x-show="loadingRooms" class="mt-4 space-y-2">
+          <div class="skeleton h-20 w-full"></div><div class="skeleton h-20 w-full"></div><div class="skeleton h-20 w-full"></div>
+        </div>
+
+        <div x-show="!loadingRooms && !availableRooms.length" style="display:none"
+             class="mt-4 flex flex-col items-center rounded-xl border border-dashed border-slate-300 py-12 text-center
+                    dark:border-slate-700">
+          <div class="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 dark:bg-slate-800">
+            <svg class="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+              <circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L21 2m-4 0h4v4"/>
+            </svg>
+          </div>
+          <p class="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Nothing free for those dates</p>
+          <p class="mt-1 max-w-xs text-xs text-slate-500">Try shifting the dates, or relax the room-type filter.</p>
+          <button @click="step = 1" class="mt-4 rounded-xl bg-brand-700 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600">
+            Change dates
+          </button>
+        </div>
+
+        <div x-show="!loadingRooms && availableRooms.length" style="display:none" class="mt-4 space-y-2">
+          <template x-for="room in availableRooms" :key="room.id">
+            <button @click="selectedRoom = room"
+                    class="flex w-full items-center gap-4 rounded-xl border p-4 text-left transition"
+                    :class="selectedRoom?.id === room.id
+                      ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-500 dark:bg-brand-700/10'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-700'">
+              <span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-700 text-sm font-bold text-white"
+                    x-text="room.room_number"></span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-semibold text-slate-900 dark:text-white" x-text="room.room_type.name"></span>
+                <span class="block truncate text-xs text-slate-500"
+                      x-text="`Floor ${room.floor} · sleeps ${room.room_type.capacity} · ${fmt.money(room.room_type.base_price)}/night`"></span>
+                <span class="mt-1.5 flex flex-wrap gap-1">
+                  <template x-for="a in (room.room_type.amenities || []).slice(0, 4)" :key="a">
+                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600
+                                 dark:bg-slate-800 dark:text-slate-400" x-text="a"></span>
+                  </template>
+                </span>
+              </span>
+              <span class="shrink-0 text-right">
+                <span class="block text-base font-bold text-slate-900 dark:text-white" x-text="fmt.money(room.total_price)"></span>
+                <span class="block text-[11px] text-slate-500" x-text="`${room.nights} night(s)`"></span>
+              </span>
+            </button>
+          </template>
+        </div>
+      </section>
+
+      {# ------------------------------------------- step 4: confirm #}
+      <section x-show="step === 3" style="display:none"
+               class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Anything else?</h2>
+        <p class="mt-1 text-xs text-slate-500">Add requests, then confirm the booking.</p>
+
+        <div class="mt-4">
+          <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">Special requests</label>
+          <textarea x-model="stay.special_requests" rows="3"
+                    placeholder="High floor, late arrival, extra bed, dietary needs…"
+                    class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"></textarea>
+        </div>
+
+        <div x-show="window.APP.isManager" style="display:none" class="mt-4">
+          <label class="block text-xs font-medium text-slate-600 dark:text-slate-400">
+            Override nightly rate <span class="text-slate-400">(managers only)</span>
+          </label>
+          <input type="number" step="0.01" min="0.01" x-model="stay.nightly_rate"
+                 :placeholder="selectedRoom ? Number(selectedRoom.room_type.base_price).toFixed(2) : ''"
+                 class="mt-1 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          <p class="mt-1 text-[11px] text-slate-400">Leave blank to use the standard rate for this room type.</p>
+        </div>
+
+        <div x-show="error" style="display:none"
+             class="mt-4 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3
+                    dark:border-red-500/30 dark:bg-red-500/10">
+          <svg class="mt-0.5 h-4 w-4 shrink-0 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M12 8v5m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <p class="text-xs text-red-700 dark:text-red-300" x-text="error"></p>
+        </div>
+      </section>
+
+      {# ----------------------------------------------------- nav buttons #}
+      <div class="flex items-center justify-between gap-3">
+        <button @click="back()" x-show="step > 0" style="display:none"
+                class="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700
+                       transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+          Back
+        </button>
+        <div class="ml-auto flex items-center gap-3">
+          <p x-show="stepError" style="display:none" class="text-xs text-red-600" x-text="stepError"></p>
+          <button @click="next()" x-show="step < 3"
+                  class="rounded-xl bg-brand-700 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600">
+            Continue
+          </button>
+          <button @click="submit()" x-show="step === 3" :disabled="submitting" style="display:none"
+                  class="rounded-xl bg-accent-500 px-6 py-2.5 text-sm font-semibold text-white transition
+                         hover:bg-accent-600 disabled:opacity-50">
+            <span x-text="submitting ? 'Confirming…' : 'Confirm booking'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {# ========================================================= summary #}
+    <aside class="lg:sticky lg:top-24 lg:h-fit">
+      <div class="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div class="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Booking summary</h2>
+        </div>
+
+        <dl class="space-y-3.5 p-5 text-sm">
+          <div>
+            <dt class="text-xs text-slate-500">Guest</dt>
+            <dd class="mt-0.5 font-medium text-slate-900 dark:text-white" x-text="guestLabel || '—'"></dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Dates</dt>
+            <dd class="mt-0.5 font-medium text-slate-900 dark:text-white"
+                x-text="stay.check_in_date && stay.check_out_date
+                  ? `${fmt.date(stay.check_in_date)} → ${fmt.date(stay.check_out_date)}` : '—'"></dd>
+            <dd x-show="nights > 0" class="text-xs text-slate-500" x-text="`${nights} night(s)`"></dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Occupancy</dt>
+            <dd class="mt-0.5 font-medium text-slate-900 dark:text-white"
+                x-text="`${stay.adults} adult(s)${stay.children ? `, ${stay.children} child(ren)` : ''}`"></dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Room</dt>
+            <dd class="mt-0.5 font-medium text-slate-900 dark:text-white"
+                x-text="selectedRoom ? `${selectedRoom.room_number} · ${selectedRoom.room_type.name}` : '—'"></dd>
+          </div>
+
+          <div class="space-y-2 border-t border-slate-200 pt-3.5 dark:border-slate-800">
+            <div class="flex justify-between text-xs">
+              <dt class="text-slate-500">Nightly rate</dt>
+              <dd class="font-medium text-slate-700 dark:text-slate-300" x-text="rate ? fmt.money(rate) : '—'"></dd>
+            </div>
+            <div class="flex justify-between text-xs">
+              <dt class="text-slate-500">Nights</dt>
+              <dd class="font-medium text-slate-700 dark:text-slate-300" x-text="nights || '—'"></dd>
+            </div>
+            <div class="flex items-baseline justify-between border-t border-slate-200 pt-2.5 dark:border-slate-800">
+              <dt class="font-semibold text-slate-900 dark:text-white">Total</dt>
+              <dd class="text-xl font-bold text-slate-900 dark:text-white" x-text="total ? fmt.money(total) : '—'"></dd>
+            </div>
+            <p class="text-[11px] text-slate-400">VAT is added on the invoice at check-out.</p>
+          </div>
+        </dl>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function bookingWizard() {
+  return {
+    step: 0,
+    stepError: '',
+    error: '',
+    submitting: false,
+
+    steps: [
+      { key: 'guest', title: 'Guest', hint: 'Who is staying' },
+      { key: 'dates', title: 'Dates', hint: 'Arrival & departure' },
+      { key: 'room', title: 'Room', hint: 'Pick what is free' },
+      { key: 'confirm', title: 'Confirm', hint: 'Review & book' },
+    ],
+
+    guestMode: 'existing',
+    guestQuery: '',
+    guestResults: [],
+    searchingGuests: false,
+    selectedGuest: null,
+    newGuest: {
+      full_name: '', phone: '', email: '', document_type: 'passport',
+      document_number: '', nationality: '',
+    },
+
+    stay: {
+      check_in_date: window.APP.today,
+      check_out_date: window.APP.tomorrow,
+      adults: 1,
+      children: 0,
+      special_requests: '',
+      nightly_rate: '',
+    },
+
+    roomTypeFilter: '',
+    availableRooms: [],
+    selectedRoom: null,
+    loadingRooms: false,
+    _presetRoomId: null,
+
+    /* ------------------------------------------------------- computed */
+    get nights() {
+      return fmt.nightsBetween(this.stay.check_in_date, this.stay.check_out_date);
+    },
+    get minCheckOut() {
+      return this.stay.check_in_date ? fmt.addDays(this.stay.check_in_date, 1) : window.APP.tomorrow;
+    },
+    get rate() {
+      if (this.stay.nightly_rate) return Number(this.stay.nightly_rate);
+      return this.selectedRoom ? Number(this.selectedRoom.room_type.base_price) : 0;
+    },
+    get total() {
+      return this.rate * this.nights;
+    },
+    get guestLabel() {
+      if (this.guestMode === 'existing') return this.selectedGuest?.full_name || '';
+      return this.newGuest.full_name;
+    },
+
+    /* ----------------------------------------------------------- boot */
+    async boot() {
+      const params = new URLSearchParams(window.location.search);
+
+      // Arriving from the rooms grid: preselect that room once we reach step 3.
+      this._presetRoomId = params.get('room_id');
+
+      const guestId = params.get('guest_id');
+      if (guestId) {
+        try {
+          this.selectedGuest = await api(`/api/v1/guests/${guestId}`);
+          this.guestQuery = this.selectedGuest.full_name;
+          this.guestResults = [this.selectedGuest];
+        } catch { /* fall through to manual search */ }
+      }
+      this.searchGuests();
+    },
+
+    initials(name) {
+      return (name || '').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
+    },
+
+    /* --------------------------------------------------------- guests */
+    async searchGuests() {
+      this.searchingGuests = true;
+      try {
+        const result = await api('/api/v1/guests', {
+          params: { q: this.guestQuery.trim() || null, size: 8 },
+        });
+        this.guestResults = result.items;
+      } catch (err) {
+        toastError('Guest search failed', err.message);
+      } finally {
+        this.searchingGuests = false;
+      }
+    },
+
+    pickGuest(guest) {
+      this.selectedGuest = this.selectedGuest?.id === guest.id ? null : guest;
+    },
+
+    /* ---------------------------------------------------------- dates */
+    onDateChange() {
+      if (this.stay.check_out_date <= this.stay.check_in_date) {
+        this.stay.check_out_date = fmt.addDays(this.stay.check_in_date, 1);
+      }
+      this.selectedRoom = null;
+    },
+
+    setNights(n) {
+      this.stay.check_out_date = fmt.addDays(this.stay.check_in_date, n);
+      this.selectedRoom = null;
+    },
+
+    /* ---------------------------------------------------------- rooms */
+    async findRooms() {
+      this.loadingRooms = true;
+      this.availableRooms = [];
+      try {
+        this.availableRooms = await api('/api/v1/rooms/availability', {
+          params: {
+            check_in_date: this.stay.check_in_date,
+            check_out_date: this.stay.check_out_date,
+            capacity: this.stay.adults + this.stay.children,
+            room_type_id: this.roomTypeFilter || null,
+          },
+        });
+
+        if (this._presetRoomId) {
+          const match = this.availableRooms.find((r) => String(r.id) === String(this._presetRoomId));
+          if (match) this.selectedRoom = match;
+          this._presetRoomId = null;
+        }
+      } catch (err) {
+        toastError('Could not check availability', err.message);
+      } finally {
+        this.loadingRooms = false;
+      }
+    },
+
+    /* ----------------------------------------------------- navigation */
+    validateStep() {
+      this.stepError = '';
+      if (this.step === 0) {
+        if (this.guestMode === 'existing' && !this.selectedGuest) {
+          this.stepError = 'Select a guest to continue.';
+        } else if (this.guestMode === 'new') {
+          const g = this.newGuest;
+          if (g.full_name.trim().length < 2) this.stepError = 'Enter the guest’s full name.';
+          else if (g.phone.trim().length < 5) this.stepError = 'Enter a phone number.';
+          else if (g.document_number.trim().length < 3) this.stepError = 'Enter a document number.';
+        }
+      } else if (this.step === 1) {
+        if (this.nights < 1) this.stepError = 'Check-out must be at least one night after check-in.';
+      } else if (this.step === 2) {
+        if (!this.selectedRoom) this.stepError = 'Choose a room to continue.';
+      }
+      return !this.stepError;
+    },
+
+    async next() {
+      if (!this.validateStep()) return;
+      this.step += 1;
+      if (this.step === 2) await this.findRooms();
+    },
+
+    back() {
+      this.stepError = '';
+      this.step = Math.max(0, this.step - 1);
+    },
+
+    /* --------------------------------------------------------- submit */
+    async submit() {
+      this.error = '';
+      this.submitting = true;
+      try {
+        const common = {
+          room_id: this.selectedRoom.id,
+          check_in_date: this.stay.check_in_date,
+          check_out_date: this.stay.check_out_date,
+          adults: this.stay.adults,
+          children: this.stay.children,
+          special_requests: this.stay.special_requests || null,
+          // Manager-only override — applies to both new and existing guests.
+          nightly_rate: this.stay.nightly_rate ? Number(this.stay.nightly_rate) : null,
+        };
+
+        let reservation;
+        if (this.guestMode === 'new') {
+          reservation = await api('/api/v1/reservations/walk-in', {
+            method: 'POST',
+            body: {
+              ...common,
+              guest: {
+                full_name: this.newGuest.full_name.trim(),
+                phone: this.newGuest.phone.trim(),
+                email: this.newGuest.email || null,
+                document_type: this.newGuest.document_type,
+                document_number: this.newGuest.document_number.trim(),
+                nationality: this.newGuest.nationality || null,
+              },
+            },
+          });
+        } else {
+          reservation = await api('/api/v1/reservations', {
+            method: 'POST',
+            body: { ...common, guest_id: this.selectedGuest.id },
+          });
+        }
+
+        toastSuccess('Booking confirmed', `${reservation.reference} · room ${reservation.room.room_number}`);
+        window.location.href = `/reservations?q=${reservation.reference}`;
+      } catch (err) {
+        this.error = err.message;
+        // A clash means someone took the room while this form was open.
+        if (err.code === 'conflict') {
+          this.step = 2;
+          await this.findRooms();
+        }
+      } finally {
+        this.submitting = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

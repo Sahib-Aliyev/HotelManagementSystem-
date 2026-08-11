@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+{% from "partials/icons.html" import nav_icon %}
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127976;</text></svg>">
+
+  <script>
+    // Applied before paint so a dark-mode reload never flashes white.
+    (function () {
+      var stored = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (stored === 'dark' || (!stored && prefersDark)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+
+  <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+          colors: {
+            brand: {
+              50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',
+              500:'#4f5fd7',600:'#3730a3',700:'#1E3A8A',800:'#172554',900:'#0f172f'
+            },
+            accent: {
+              50:'#ecfdf5',100:'#d1fae5',300:'#6ee7b7',500:'#10B981',600:'#059669',700:'#047857'
+            }
+          },
+          keyframes: {
+            'fade-up': { '0%': { opacity: 0, transform: 'translateY(6px)' }, '100%': { opacity: 1, transform: 'none' } },
+            'slide-in': { '0%': { opacity: 0, transform: 'translateX(16px)' }, '100%': { opacity: 1, transform: 'none' } },
+          },
+          animation: {
+            'fade-up': 'fade-up .25s ease-out both',
+            'slide-in': 'slide-in .25s ease-out both',
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+
+<body class="h-full bg-slate-50 font-sans text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-200">
+
+{% if user %}
+<div x-data="shell()" class="flex min-h-full">
+
+  {# ------------------------------------------------------------ sidebar #}
+  <div x-show="mobileOpen" x-transition.opacity
+       @click="mobileOpen = false"
+       class="fixed inset-0 z-30 bg-slate-900/60 backdrop-blur-sm lg:hidden" style="display:none"></div>
+
+  <aside :class="[
+           collapsed ? 'lg:w-[76px]' : 'lg:w-64',
+           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+         ]"
+         class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200
+                bg-white transition-all duration-200 dark:border-slate-800 dark:bg-slate-900 lg:static">
+
+    <div class="flex h-16 items-center gap-3 border-b border-slate-200 px-4 dark:border-slate-800">
+      <div class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-700 text-sm font-bold text-white">GA</div>
+      <div x-show="!collapsed" class="min-w-0">
+        <p class="truncate text-sm font-semibold text-slate-900 dark:text-white">{{ app_name }}</p>
+        <p class="text-[11px] text-slate-500">Front office</p>
+      </div>
+      <button @click="mobileOpen = false" class="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    {% set nav_items = [
+      ('/',              'dashboard',       'Dashboard',    'grid',     false),
+      ('/front-desk',    'front-desk',      'Front desk',   'bell',     false),
+      ('/reservations',  'reservations',     'Reservations', 'calendar', false),
+      ('/rooms',         'rooms',            'Rooms',        'key',      false),
+      ('/guests',        'guests',           'Guests',       'users',    false),
+      ('/reports',       'reports',          'Reports',      'chart',    true),
+      ('/settings',      'settings',         'Settings',     'cog',      false)
+    ] %}
+
+    <nav class="flex-1 space-y-1 overflow-y-auto p-3">
+      {% for href, key, label, icon, manager_only in nav_items %}
+        {% if not manager_only or is_manager %}
+        <a href="{{ href }}"
+           class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition
+                  {% if page == key %}bg-brand-700 text-white shadow-sm
+                  {% else %}text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200{% endif %}">
+          <span class="shrink-0">{{ nav_icon(icon) }}</span>
+          <span x-show="!collapsed" class="truncate">{{ label }}</span>
+        </a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+
+    <div class="border-t border-slate-200 p-3 dark:border-slate-800">
+      <a href="/reservations/new"
+         class="flex items-center justify-center gap-2 rounded-xl bg-accent-500 px-3 py-2.5 text-sm
+                font-semibold text-white shadow-sm transition hover:bg-accent-600">
+        <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <span x-show="!collapsed">New booking</span>
+      </a>
+    </div>
+  </aside>
+
+  {# --------------------------------------------------------------- main #}
+  <div class="flex min-w-0 flex-1 flex-col">
+
+    <header class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/90
+                   px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 sm:px-6">
+      <button @click="mobileOpen = true" class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <button @click="collapsed = !collapsed" class="hidden rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 lg:block">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h16"/></svg>
+      </button>
+
+      <div class="min-w-0">
+        <nav class="flex items-center gap-1.5 text-xs text-slate-400">
+          <span>{{ app_name }}</span>
+          <span>/</span>
+          <span class="font-medium text-slate-600 dark:text-slate-300">{% block breadcrumb %}Dashboard{% endblock %}</span>
+        </nav>
+        <h1 class="truncate text-lg font-semibold text-slate-900 dark:text-white">{% block heading %}Dashboard{% endblock %}</h1>
+      </div>
+
+      <div class="ml-auto flex items-center gap-1 sm:gap-2">
+        <button @click="toggleTheme()" title="Toggle theme"
+                class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <svg x-show="!dark" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+          <svg x-show="dark" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        </button>
+
+        <div x-data="{ open: false }" class="relative">
+          <button @click="open = !open" @click.outside="open = false"
+                  class="flex items-center gap-2 rounded-xl p-1.5 pr-2 hover:bg-slate-100 dark:hover:bg-slate-800">
+            <span class="grid h-8 w-8 place-items-center rounded-lg bg-brand-700 text-xs font-bold text-white">{{ user.initials }}</span>
+            <span class="hidden text-left sm:block">
+              <span class="block text-xs font-semibold leading-tight text-slate-900 dark:text-white">{{ user.full_name }}</span>
+              <span class="block text-[11px] capitalize leading-tight text-slate-500">{{ user.role.value }}</span>
+            </span>
+          </button>
+          <div x-show="open" x-transition style="display:none"
+               class="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white
+                      shadow-lg dark:border-slate-700 dark:bg-slate-800">
+            <div class="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+              <p class="truncate text-sm font-medium text-slate-900 dark:text-white">{{ user.full_name }}</p>
+              <p class="truncate text-xs text-slate-500">{{ user.email }}</p>
+            </div>
+            <a href="/settings" class="block px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">Settings</a>
+            <button @click="logout()" class="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10">Sign out</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="flex-1 p-4 sm:p-6">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="border-t border-slate-200 px-6 py-4 text-xs text-slate-400 dark:border-slate-800">
+      {{ app_name }} · Guest Management System v1.0 ·
+      <a href="/api/docs" class="underline hover:text-brand-500">API docs</a>
+    </footer>
+  </div>
+</div>
+{% else %}
+  {% block auth_content %}{% endblock %}
+{% endif %}
+
+{# --------------------------------------------------------------- toasts #}
+<div x-data="toastHost()" @toast.window="push($event.detail)"
+     class="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2">
+  <template x-for="t in items" :key="t.id">
+    <div class="pointer-events-auto flex animate-slide-in items-start gap-3 rounded-xl border p-3.5 shadow-lg"
+         :class="{
+           'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700': t.type === 'info',
+           'bg-accent-50 border-accent-300 dark:bg-accent-500/10 dark:border-accent-500/40': t.type === 'success',
+           'bg-red-50 border-red-300 dark:bg-red-500/10 dark:border-red-500/40': t.type === 'error'
+         }">
+      <span class="mt-0.5 shrink-0" :class="{
+        'text-slate-400': t.type === 'info',
+        'text-accent-600 dark:text-accent-300': t.type === 'success',
+        'text-red-600 dark:text-red-400': t.type === 'error'
+      }">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <template x-if="t.type === 'success'"><path d="M20 6L9 17l-5-5"/></template>
+          <template x-if="t.type === 'error'"><path d="M12 8v5m0 3h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></template>
+          <template x-if="t.type === 'info'"><path d="M12 16v-4m0-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></template>
+        </svg>
+      </span>
+      <div class="min-w-0 flex-1">
+        <p class="text-sm font-medium text-slate-900 dark:text-white" x-text="t.title"></p>
+        <p x-show="t.body" class="mt-0.5 text-xs text-slate-600 dark:text-slate-400" x-text="t.body"></p>
+      </div>
+      <button @click="dismiss(t.id)" class="shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </template>
+</div>
+
+<script>
+  window.APP = {
+    currency: {{ currency | tojson }},
+    currencySymbol: {{ currency_symbol | tojson }},
+    taxRate: {{ tax_rate }},
+    today: {{ today | tojson }},
+    tomorrow: {{ tomorrow | tojson }},
+    isManager: {{ is_manager | tojson }},
+    isAdmin: {{ is_admin | tojson }}
+  };
+</script>
+<script src="/static/js/app.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

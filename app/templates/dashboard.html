@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · {{ app_name }}{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+{% block heading %}Good day, {{ user.full_name.split()[0] }}{% endblock %}
+
+{% block content %}
+<div x-data="dashboard()" x-init="load()" class="space-y-6">
+
+  {# ------------------------------------------------------------ KPI row #}
+  <div x-show="loading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <template x-for="i in 4" :key="i">
+      <div class="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+        <div class="skeleton h-3 w-24"></div>
+        <div class="skeleton mt-4 h-8 w-20"></div>
+        <div class="skeleton mt-3 h-2 w-full"></div>
+      </div>
+    </template>
+  </div>
+
+  <div x-show="!loading" style="display:none" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <template x-for="card in cards" :key="card.label">
+      <div class="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md
+                  dark:border-slate-800 dark:bg-slate-900">
+        <div class="flex items-start justify-between">
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500" x-text="card.label"></p>
+          <span class="grid h-8 w-8 place-items-center rounded-lg" :class="card.iconBg" x-html="card.icon"></span>
+        </div>
+        <p class="mt-3 text-3xl font-bold text-slate-900 dark:text-white" x-text="card.value"></p>
+        <p class="mt-1 text-xs text-slate-500" x-text="card.hint"></p>
+        <div x-show="card.bar !== undefined" class="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+          <div class="h-full rounded-full transition-all duration-700" :class="card.barColor"
+               :style="`width: ${Math.min(card.bar || 0, 100)}%`"></div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  {# ------------------------------------------------------------- charts #}
+  <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:col-span-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Revenue, last 14 days</h2>
+          <p class="text-xs text-slate-500">Settled payments by the day they were taken</p>
+        </div>
+        <span class="rounded-lg bg-accent-50 px-2.5 py-1 text-xs font-semibold text-accent-700
+                     dark:bg-accent-500/10 dark:text-accent-300"
+              x-text="revenueTotal"></span>
+      </div>
+      <div class="relative mt-4 h-64">
+        <div x-show="loading" class="skeleton absolute inset-0"></div>
+        <canvas x-ref="revenueChart"></canvas>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:col-span-2">
+      <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Room status right now</h2>
+      <p class="text-xs text-slate-500">Live housekeeping picture</p>
+      <div class="relative mt-4 h-48">
+        <div x-show="loading" class="skeleton absolute inset-0"></div>
+        <canvas x-ref="roomsChart"></canvas>
+      </div>
+      <div class="mt-4 grid grid-cols-2 gap-2">
+        <template x-for="row in roomLegend" :key="row.label">
+          <div class="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-800/60">
+            <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="`background:${row.color}`"></span>
+            <span class="text-xs text-slate-600 dark:text-slate-400" x-text="row.label"></span>
+            <span class="ml-auto text-xs font-bold text-slate-900 dark:text-white" x-text="row.value"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  {# --------------------------------------------------------- work lists #}
+  <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+    <template x-for="list in lists" :key="list.key">
+      <div class="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <div class="flex items-center gap-2.5">
+            <span class="h-2 w-2 rounded-full" :class="list.dot"></span>
+            <h2 class="text-sm font-semibold text-slate-900 dark:text-white" x-text="list.title"></h2>
+          </div>
+          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600
+                       dark:bg-slate-800 dark:text-slate-300" x-text="list.items.length"></span>
+        </div>
+
+        <div class="flex-1 divide-y divide-slate-100 dark:divide-slate-800">
+          <div x-show="loading">
+            <template x-for="i in 3" :key="i">
+              <div class="px-5 py-3.5">
+                <div class="skeleton h-3 w-32"></div>
+                <div class="skeleton mt-2 h-2.5 w-44"></div>
+              </div>
+            </template>
+          </div>
+
+          <div x-show="!loading && list.items.length === 0" style="display:none">
+            <div class="flex flex-col items-center justify-center px-5 py-10 text-center">
+              <div class="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 dark:bg-slate-800">
+                <svg class="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+              </div>
+              <p class="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300" x-text="list.emptyTitle"></p>
+              <p class="mt-1 text-xs text-slate-400" x-text="list.emptyBody"></p>
+            </div>
+          </div>
+
+          <template x-for="r in list.items" :key="r.id">
+            <div class="flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
+              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-xs font-bold
+                           text-brand-700 dark:bg-brand-700/20 dark:text-brand-200"
+                    x-text="r.room.room_number"></span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-slate-900 dark:text-white" x-text="r.guest.full_name"></p>
+                <p class="truncate text-xs text-slate-500">
+                  <span x-text="r.room.room_type.name"></span> ·
+                  <span x-text="`${r.nights}n`"></span> ·
+                  <span x-text="fmt.money(r.total_price)"></span>
+                </p>
+              </div>
+              <div class="flex shrink-0 items-center gap-2">
+                <span class="hidden rounded-md px-2 py-0.5 text-[11px] font-semibold sm:inline"
+                      :class="badgeClass(r.status)" x-text="fmt.titleCase(r.status)"></span>
+                <button x-show="list.key === 'arrivals'" @click="checkIn(r)"
+                        class="rounded-lg bg-accent-500 px-2.5 py-1.5 text-xs font-semibold text-white
+                               transition hover:bg-accent-600">Check in</button>
+                <button x-show="list.key === 'departures'" @click="goto(r)"
+                        class="rounded-lg bg-brand-700 px-2.5 py-1.5 text-xs font-semibold text-white
+                               transition hover:bg-brand-600">Check out</button>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <a :href="list.href" class="border-t border-slate-100 px-5 py-3 text-xs font-semibold text-brand-600
+                                    transition hover:bg-slate-50 dark:border-slate-800 dark:text-brand-300
+                                    dark:hover:bg-slate-800/50">
+          <span x-text="list.cta"></span> →
+        </a>
+      </div>
+    </template>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+const ICONS = {
+  arrivals: '<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>',
+  occupancy: '<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>',
+  revenue: '<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>',
+  guests: '<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>',
+};
+
+const ROOM_COLORS = {
+  available: '#10B981',
+  occupied: '#ef4444',
+  cleaning: '#f59e0b',
+  maintenance: '#94a3b8',
+};
+
+function dashboard() {
+  return {
+    loading: true,
+    stats: {},
+    lists: [],
+    cards: [],
+    roomLegend: [],
+    revenueTotal: '',
+    _charts: {},
+
+    async load() {
+      try {
+        const [payload, trend, statusSummary] = await Promise.all([
+          api('/api/v1/reports/dashboard'),
+          api('/api/v1/reports/revenue-trend', { params: { days: 14 } }),
+          api('/api/v1/rooms/status-summary'),
+        ]);
+
+        this.stats = payload.stats;
+        this.buildCards();
+        this.buildLists(payload);
+        this.buildLegend(statusSummary);
+
+        this.revenueTotal = fmt.money(trend.reduce((sum, p) => sum + Number(p.value), 0));
+        this.loading = false;
+
+        // Charts need the canvases visible, which happens once loading flips.
+        this.$nextTick(() => {
+          this.drawRevenue(trend);
+          this.drawRooms(statusSummary);
+        });
+      } catch (err) {
+        this.loading = false;
+        toastError('Could not load the dashboard', err.message);
+      }
+    },
+
+    buildCards() {
+      const s = this.stats;
+      this.cards = [
+        {
+          label: "Today's arrivals",
+          value: s.arrivals_today,
+          hint: `${s.departures_today} departure(s) due`,
+          icon: ICONS.arrivals,
+          iconBg: 'bg-brand-50 text-brand-700 dark:bg-brand-700/20 dark:text-brand-200',
+        },
+        {
+          label: 'Occupancy',
+          value: `${s.occupancy_rate}%`,
+          hint: `${s.rooms_occupied} of ${s.rooms_total - s.rooms_out_of_service} sellable rooms`,
+          icon: ICONS.occupancy,
+          iconBg: 'bg-accent-50 text-accent-600 dark:bg-accent-500/15 dark:text-accent-300',
+          bar: s.occupancy_rate,
+          barColor: s.occupancy_rate > 85 ? 'bg-red-500' : s.occupancy_rate > 60 ? 'bg-accent-500' : 'bg-brand-500',
+        },
+        {
+          label: 'Revenue this month',
+          value: fmt.moneyShort(s.revenue_month),
+          hint: `${fmt.money(s.revenue_today)} taken today`,
+          icon: ICONS.revenue,
+          iconBg: 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300',
+        },
+        {
+          label: 'In-house guests',
+          value: s.in_house_guests,
+          hint: s.outstanding_balance > 0
+            ? `${fmt.money(s.outstanding_balance)} outstanding`
+            : 'All accounts settled',
+          icon: ICONS.guests,
+          iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-500/15 dark:text-purple-300',
+        },
+      ];
+    },
+
+    buildLists(payload) {
+      this.lists = [
+        {
+          key: 'arrivals',
+          title: 'Arrivals today',
+          items: payload.arrivals,
+          dot: 'bg-brand-500',
+          emptyTitle: 'No arrivals today',
+          emptyBody: 'Nothing on the books for check-in.',
+          href: '/front-desk',
+          cta: 'Open front desk',
+        },
+        {
+          key: 'departures',
+          title: 'Departures today',
+          items: payload.departures,
+          dot: 'bg-amber-500',
+          emptyTitle: 'No departures today',
+          emptyBody: 'Every in-house guest is staying on.',
+          href: '/front-desk',
+          cta: 'Open front desk',
+        },
+        {
+          key: 'in_house',
+          title: 'In house',
+          items: payload.in_house,
+          dot: 'bg-accent-500',
+          emptyTitle: 'The hotel is empty',
+          emptyBody: 'No guests are currently checked in.',
+          href: '/reservations?status=checked_in',
+          cta: 'View all stays',
+        },
+      ];
+    },
+
+    buildLegend(summary) {
+      this.roomLegend = Object.entries(summary).map(([key, value]) => ({
+        label: fmt.titleCase(key),
+        value,
+        color: ROOM_COLORS[key] || '#94a3b8',
+      }));
+    },
+
+    drawRevenue(trend) {
+      const t = chartTheme();
+      const ctx = this.$refs.revenueChart;
+      if (!ctx) return;
+      this._charts.revenue?.destroy();
+
+      const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 240);
+      gradient.addColorStop(0, 'rgba(30,58,138,0.28)');
+      gradient.addColorStop(1, 'rgba(30,58,138,0.00)');
+
+      this._charts.revenue = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: trend.map((p) => p.label),
+          datasets: [{
+            data: trend.map((p) => Number(p.value)),
+            borderColor: t.brand,
+            backgroundColor: gradient,
+            borderWidth: 2.5,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: t.brand,
+            fill: true,
+            tension: 0.35,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              displayColors: false,
+              callbacks: { label: (c) => fmt.money(c.parsed.y) },
+            },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: t.text, font: { size: 11 }, maxRotation: 0, autoSkipPadding: 12 } },
+            y: {
+              beginAtZero: true,
+              grid: { color: t.grid, drawTicks: false },
+              border: { display: false },
+              ticks: { color: t.text, font: { size: 11 }, callback: (v) => fmt.moneyShort(v) },
+            },
+          },
+        },
+      });
+    },
+
+    drawRooms(summary) {
+      const t = chartTheme();
+      const ctx = this.$refs.roomsChart;
+      if (!ctx) return;
+      this._charts.rooms?.destroy();
+
+      const entries = Object.entries(summary).filter(([, v]) => v > 0);
+      this._charts.rooms = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: entries.map(([k]) => fmt.titleCase(k)),
+          datasets: [{
+            data: entries.map(([, v]) => v),
+            backgroundColor: entries.map(([k]) => ROOM_COLORS[k] || '#94a3b8'),
+            borderWidth: 0,
+            hoverOffset: 6,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '68%',
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (c) => `${c.label}: ${c.parsed} room(s)` } },
+          },
+        },
+      });
+    },
+
+    async checkIn(reservation) {
+      try {
+        await api(`/api/v1/reservations/${reservation.id}/check-in`, { method: 'POST' });
+        toastSuccess('Checked in', `${reservation.guest.full_name} → room ${reservation.room.room_number}`);
+        this.loading = true;
+        await this.load();
+      } catch (err) {
+        toastError('Check-in failed', err.message);
+      }
+    },
+
+    goto(reservation) {
+      window.location.href = `/front-desk?ref=${reservation.reference}`;
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,68 @@
+/* Small refinements on top of Tailwind. */
+
+[x-cloak] { display: none !important; }
+
+:root { color-scheme: light; }
+html.dark { color-scheme: dark; }
+
+/* Softer, thinner scrollbars that match the surface they sit on. */
+* { scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, 0.35) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.55); }
+
+/* Loading skeleton — a slow sheen rather than a spinner. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(100, 116, 139, 0.12);
+  border-radius: 0.5rem;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+  animation: skeleton-sheen 1.4s infinite;
+}
+html.dark .skeleton::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+}
+@keyframes skeleton-sheen {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Consistent focus ring across native controls. */
+:where(input, select, textarea, button, a):focus-visible {
+  outline: 2px solid #4f5fd7;
+  outline-offset: 2px;
+}
+
+/* The room-status stripe on each room card. */
+.room-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.room-card:hover { transform: translateY(-2px); }
+
+/* Print: invoices and folios only. */
+@media print {
+  aside, header, footer, .no-print { display: none !important; }
+  main { padding: 0 !important; }
+  body { background: #fff !important; color: #000 !important; }
+}

@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+{% block title %}Reports · {{ app_name }}{% endblock %}
+{% block breadcrumb %}Reports{% endblock %}
+{% block heading %}Management reports{% endblock %}
+
+{% block content %}
+<div x-data="reportsPage()" x-init="boot()" class="space-y-5">
+
+  {# ------------------------------------------------------- period picker #}
+  <div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm
+              dark:border-slate-800 dark:bg-slate-900 lg:flex-row lg:items-center">
+    <div class="flex flex-wrap gap-1.5">
+      <template x-for="p in presets" :key="p.label">
+        <button @click="applyPreset(p)"
+                class="rounded-lg px-3 py-2 text-xs font-semibold transition"
+                :class="activePreset === p.label
+                  ? 'bg-brand-700 text-white'
+                  : 'border border-slate-300 text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:text-slate-300'"
+                x-text="p.label"></button>
+      </template>
+    </div>
+
+    <div class="flex flex-1 flex-wrap items-center gap-2 lg:justify-end">
+      <input type="date" x-model="range.start" @change="activePreset = ''; load()"
+             class="rounded-xl border-slate-300 py-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+      <span class="text-xs text-slate-400">→</span>
+      <input type="date" x-model="range.end" @change="activePreset = ''; load()"
+             class="rounded-xl border-slate-300 py-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+      <button @click="exportCsv()" :disabled="loading || !report"
+              class="flex items-center gap-1.5 rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold
+                     text-slate-700 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700
+                     dark:text-slate-200 dark:hover:bg-slate-800">
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+        </svg>
+        Export CSV
+      </button>
+      <button @click="window.print()"
+              class="rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold text-slate-700
+                     transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+        Print
+      </button>
+    </div>
+  </div>
+
+  {# ---------------------------------------------------------- KPI cards #}
+  <div x-show="loading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <template x-for="i in 4" :key="i">
+      <div class="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+        <div class="skeleton h-3 w-24"></div><div class="skeleton mt-4 h-8 w-24"></div>
+      </div>
+    </template>
+  </div>
+
+  <div x-show="!loading && report" style="display:none" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <template x-for="k in kpis" :key="k.label">
+      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500" x-text="k.label"></p>
+        <p class="mt-2.5 text-2xl font-bold text-slate-900 dark:text-white" x-text="k.value"></p>
+        <p class="mt-1 text-xs text-slate-500" x-text="k.hint"></p>
+      </div>
+    </template>
+  </div>
+
+  {# ------------------------------------------------------------- charts #}
+  <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Revenue by day</h2>
+      <p class="text-xs text-slate-500">Payments settled in the period</p>
+      <div class="relative mt-4 h-72">
+        <div x-show="loading" class="skeleton absolute inset-0"></div>
+        <canvas x-ref="revenue"></canvas>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Occupancy by day</h2>
+      <p class="text-xs text-slate-500">Share of sellable rooms sold each night</p>
+      <div class="relative mt-4 h-72">
+        <div x-show="loading" class="skeleton absolute inset-0"></div>
+        <canvas x-ref="occupancy"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
+    {# ------------------------------------------------ room type table #}
+    <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm
+                dark:border-slate-800 dark:bg-slate-900 lg:col-span-3">
+      <div class="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+        <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Performance by room type</h2>
+        <p class="text-xs text-slate-500">Bookings that overlap the period</p>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[520px] text-sm">
+          <thead class="bg-slate-50 dark:bg-slate-800/50">
+            <tr class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th class="px-5 py-3">Room type</th>
+              <th class="px-5 py-3 text-right">Bookings</th>
+              <th class="px-5 py-3 text-right">Nights sold</th>
+              <th class="px-5 py-3 text-right">Revenue</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            <template x-if="!loading && !(report?.room_type_performance || []).length">
+              <tr><td colspan="4" class="px-5 py-12 text-center text-sm text-slate-500">
+                No bookings in this period.
+              </td></tr>
+            </template>
+            <template x-for="row in report?.room_type_performance || []" :key="row.room_type">
+              <tr class="transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                <td class="px-5 py-3.5 font-medium text-slate-900 dark:text-white" x-text="row.room_type"></td>
+                <td class="px-5 py-3.5 text-right text-slate-600 dark:text-slate-400" x-text="row.bookings"></td>
+                <td class="px-5 py-3.5 text-right text-slate-600 dark:text-slate-400" x-text="row.nights_sold"></td>
+                <td class="px-5 py-3.5 text-right font-semibold text-slate-900 dark:text-white" x-text="fmt.money(row.revenue)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# --------------------------------------------- payment method split #}
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:col-span-2">
+      <h2 class="text-sm font-semibold text-slate-900 dark:text-white">How guests paid</h2>
+      <p class="text-xs text-slate-500">Settled payments by method</p>
+
+      <div class="relative mt-4 h-52">
+        <div x-show="loading" class="skeleton absolute inset-0"></div>
+        <canvas x-ref="methods"></canvas>
+      </div>
+
+      <div class="mt-4 space-y-1.5">
+        <template x-if="!loading && !(report?.payment_method_split || []).length">
+          <p class="text-center text-xs text-slate-500">No payments recorded in this period.</p>
+        </template>
+        <template x-for="(m, i) in report?.payment_method_split || []" :key="m.label">
+          <div class="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+            <span class="h-2.5 w-2.5 rounded-full" :style="`background:${METHOD_COLORS[i % METHOD_COLORS.length]}`"></span>
+            <span class="text-xs text-slate-600 dark:text-slate-400" x-text="fmt.titleCase(m.label)"></span>
+            <span class="ml-auto text-xs font-bold text-slate-900 dark:text-white" x-text="fmt.money(m.value)"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+const METHOD_COLORS = ['#1E3A8A', '#10B981', '#f59e0b', '#8b5cf6'];
+
+function isoDaysAgo(days) {
+  const d = new Date(window.APP.today);
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+function reportsPage() {
+  return {
+    loading: true,
+    report: null,
+    activePreset: 'Last 30 days',
+    range: { start: isoDaysAgo(29), end: window.APP.today },
+    _charts: {},
+
+    get presets() {
+      const today = window.APP.today;
+      return [
+        { label: 'Last 7 days', start: isoDaysAgo(6), end: today },
+        { label: 'Last 30 days', start: isoDaysAgo(29), end: today },
+        { label: 'Last 90 days', start: isoDaysAgo(89), end: today },
+        { label: 'This month', start: today.slice(0, 8) + '01', end: today },
+      ];
+    },
+
+    get kpis() {
+      const r = this.report;
+      if (!r) return [];
+      const days = fmt.nightsBetween(r.period_start, r.period_end) + 1;
+      return [
+        { label: 'Total revenue', value: fmt.money(r.total_revenue), hint: `over ${days} day(s)` },
+        { label: 'Bookings', value: r.total_bookings, hint: `${r.total_nights} room-night(s) sold` },
+        { label: 'Average daily rate', value: fmt.money(r.average_daily_rate), hint: 'revenue ÷ nights sold' },
+        { label: 'Average occupancy', value: `${r.average_occupancy}%`, hint: 'of sellable room-nights' },
+      ];
+    },
+
+    boot() {
+      this.load();
+      // Redraw with theme-appropriate axis colours when the user flips modes.
+      window.addEventListener('theme-changed', () => this.draw());
+    },
+
+    async load() {
+      this.loading = true;
+      try {
+        this.report = await api('/api/v1/reports/summary', {
+          params: { start: this.range.start, end: this.range.end },
+        });
+        this.loading = false;
+        this.$nextTick(() => this.draw());
+      } catch (err) {
+        this.loading = false;
+        toastError('Could not build the report', err.message);
+      }
+    },
+
+    applyPreset(preset) {
+      this.activePreset = preset.label;
+      this.range = { start: preset.start, end: preset.end };
+      this.load();
+    },
+
+    draw() {
+      if (!this.report) return;
+      this.drawRevenue();
+      this.drawOccupancy();
+      this.drawMethods();
+    },
+
+    drawRevenue() {
+      const t = chartTheme();
+      const ctx = this.$refs.revenue;
+      if (!ctx) return;
+      this._charts.revenue?.destroy();
+      this._charts.revenue = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: this.report.revenue_series.map((p) => p.label),
+          datasets: [{
+            data: this.report.revenue_series.map((p) => Number(p.value)),
+            backgroundColor: t.brand,
+            hoverBackgroundColor: '#4f5fd7',
+            borderRadius: 4,
+            maxBarThickness: 28,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { displayColors: false, callbacks: { label: (c) => fmt.money(c.parsed.y) } },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: t.text, font: { size: 10 }, maxRotation: 0, autoSkipPadding: 14 } },
+            y: {
+              beginAtZero: true, grid: { color: t.grid, drawTicks: false }, border: { display: false },
+              ticks: { color: t.text, font: { size: 10 }, callback: (v) => fmt.moneyShort(v) },
+            },
+          },
+        },
+      });
+    },
+
+    drawOccupancy() {
+      const t = chartTheme();
+      const ctx = this.$refs.occupancy;
+      if (!ctx) return;
+      this._charts.occupancy?.destroy();
+      this._charts.occupancy = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: this.report.occupancy_series.map((p) => fmt.dateShort(p.day)),
+          datasets: [{
+            data: this.report.occupancy_series.map((p) => p.rate),
+            borderColor: t.accent,
+            backgroundColor: t.accentSoft,
+            borderWidth: 2.5,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            fill: true,
+            tension: 0.35,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              displayColors: false,
+              callbacks: {
+                label: (c) => {
+                  const point = this.report.occupancy_series[c.dataIndex];
+                  return `${point.rate}% · ${point.occupied}/${point.total} rooms`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: t.text, font: { size: 10 }, maxRotation: 0, autoSkipPadding: 14 } },
+            y: {
+              beginAtZero: true, max: 100, grid: { color: t.grid, drawTicks: false }, border: { display: false },
+              ticks: { color: t.text, font: { size: 10 }, callback: (v) => `${v}%` },
+            },
+          },
+        },
+      });
+    },
+
+    drawMethods() {
+      const ctx = this.$refs.methods;
+      if (!ctx) return;
+      this._charts.methods?.destroy();
+      const split = this.report.payment_method_split;
+      if (!split.length) return;
+
+      this._charts.methods = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: split.map((m) => fmt.titleCase(m.label)),
+          datasets: [{
+            data: split.map((m) => Number(m.value)),
+            backgroundColor: split.map((_, i) => METHOD_COLORS[i % METHOD_COLORS.length]),
+            borderWidth: 0,
+            hoverOffset: 6,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '65%',
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt.money(c.parsed)}` } },
+          },
+        },
+      });
+    },
+
+    exportCsv() {
+      const r = this.report;
+      const rows = [
+        ['Grand Aurora Hotel — management report'],
+        ['Period', r.period_start, r.period_end],
+        [],
+        ['Metric', 'Value'],
+        ['Total revenue', r.total_revenue],
+        ['Bookings', r.total_bookings],
+        ['Room-nights sold', r.total_nights],
+        ['Average daily rate', r.average_daily_rate],
+        ['Average occupancy %', r.average_occupancy],
+        [],
+        ['Room type', 'Bookings', 'Nights sold', 'Revenue'],
+        ...r.room_type_performance.map((x) => [x.room_type, x.bookings, x.nights_sold, x.revenue]),
+        [],
+        ['Date', 'Revenue', 'Occupied rooms', 'Occupancy %'],
+        ...r.revenue_series.map((p, i) => [
+          r.occupancy_series[i]?.day || p.label,
+          p.value,
+          r.occupancy_series[i]?.occupied ?? '',
+          r.occupancy_series[i]?.rate ?? '',
+        ]),
+      ];
+
+      const csv = rows
+        .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `report-${r.period_start}-to-${r.period_end}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toastSuccess('Report exported', link.download);
+    },
+  };
+}
+</script>
+{% endblock %}

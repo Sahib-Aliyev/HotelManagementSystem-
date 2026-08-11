@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+{% from "partials/confirm.html" import confirm_dialog %}
+{% block title %}Front desk · {{ app_name }}{% endblock %}
+{% block breadcrumb %}Front desk{% endblock %}
+{% block heading %}Front desk{% endblock %}
+
+{% block content %}
+<div x-data="frontDesk()" x-init="load()" class="space-y-5">
+
+  {# ------------------------------------------------------- lookup bar #}
+  <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div class="relative flex-1">
+        <svg class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+             fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>
+        </svg>
+        <input type="search" x-model.debounce.350ms="query" @input="search()"
+               placeholder="Booking reference, guest name, phone or room number…"
+               class="w-full rounded-xl border-slate-300 bg-white pl-10 pr-3 py-2.5 text-sm shadow-sm
+                      focus:border-brand-500 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+      </div>
+      <a href="/reservations/new"
+         class="flex items-center justify-center gap-2 rounded-xl bg-accent-500 px-4 py-2.5 text-sm
+                font-semibold text-white transition hover:bg-accent-600">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        Walk-in booking
+      </a>
+    </div>
+
+    <div x-show="results.length" style="display:none" class="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+      <template x-for="r in results" :key="r.id">
+        <button @click="select(r)" class="flex w-full items-center gap-3 px-1 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
+          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-xs font-bold
+                       text-slate-600 dark:bg-slate-800 dark:text-slate-300" x-text="r.room.room_number"></span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-medium text-slate-900 dark:text-white" x-text="r.guest.full_name"></span>
+            <span class="block truncate text-xs text-slate-500">
+              <span class="font-mono" x-text="r.reference"></span> ·
+              <span x-text="`${fmt.dateShort(r.check_in_date)} → ${fmt.dateShort(r.check_out_date)}`"></span>
+            </span>
+          </span>
+          <span class="rounded-md px-2 py-0.5 text-[11px] font-semibold" :class="badgeClass(r.status)"
+                x-text="fmt.titleCase(r.status)"></span>
+        </button>
+      </template>
+    </div>
+
+    <p x-show="query.length > 1 && !results.length && !searching" style="display:none"
+       class="mt-3 text-sm text-slate-500">No reservation matches “<span x-text="query"></span>”.</p>
+  </div>
+
+  {# ------------------------------------------------------ three columns #}
+  <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+    <template x-for="col in columns" :key="col.key">
+      <section class="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <header class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-900 dark:text-white" x-text="col.title"></h2>
+            <p class="text-xs text-slate-500" x-text="col.subtitle"></p>
+          </div>
+          <span class="grid h-8 min-w-8 place-items-center rounded-lg px-2 text-sm font-bold"
+                :class="col.badge" x-text="col.items.length"></span>
+        </header>
+
+        <div class="flex-1 divide-y divide-slate-100 dark:divide-slate-800">
+          <div x-show="loading">
+            <template x-for="i in 3" :key="i">
+              <div class="px-5 py-4">
+                <div class="skeleton h-3.5 w-36"></div>
+                <div class="skeleton mt-2 h-2.5 w-48"></div>
+              </div>
+            </template>
+          </div>
+
+          <div x-show="!loading && !col.items.length" style="display:none"
+               class="flex flex-col items-center px-5 py-12 text-center">
+            <div class="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 dark:bg-slate-800">
+              <span x-html="col.emptyIcon" class="text-slate-400"></span>
+            </div>
+            <p class="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300" x-text="col.emptyTitle"></p>
+            <p class="mt-1 max-w-[22ch] text-xs text-slate-400" x-text="col.emptyBody"></p>
+          </div>
+
+          <template x-for="r in col.items" :key="r.id">
+            <article class="px-5 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
+              <div class="flex items-start gap-3">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-sm font-bold
+                             text-brand-700 dark:bg-brand-700/20 dark:text-brand-200" x-text="r.room.room_number"></span>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-semibold text-slate-900 dark:text-white" x-text="r.guest.full_name"></p>
+                  <p class="mt-0.5 truncate text-xs text-slate-500">
+                    <span x-text="r.room.room_type.name"></span> ·
+                    <span x-text="`${r.adults + r.children} guest(s)`"></span> ·
+                    <span x-text="`${r.nights} night(s)`"></span>
+                  </p>
+                  <p class="mt-1 truncate font-mono text-[11px] text-slate-400" x-text="r.reference"></p>
+                  <p x-show="r.special_requests" style="display:none"
+                     class="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800
+                            dark:bg-amber-500/10 dark:text-amber-200" x-text="r.special_requests"></p>
+                </div>
+                <span class="shrink-0 text-right">
+                  <span class="block text-sm font-bold text-slate-900 dark:text-white" x-text="fmt.money(r.total_price)"></span>
+                  <span class="mt-1 inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                        :class="badgeClass(r.status)" x-text="fmt.titleCase(r.status)"></span>
+                </span>
+              </div>
+
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button x-show="col.key === 'arrivals'" @click="doCheckIn(r)" :disabled="busy === r.id"
+                        class="flex-1 rounded-lg bg-accent-500 px-3 py-2 text-xs font-semibold text-white
+                               transition hover:bg-accent-600 disabled:opacity-50">
+                  <span x-text="busy === r.id ? 'Checking in…' : 'Check in'"></span>
+                </button>
+                <button x-show="col.key === 'departures' || col.key === 'in_house'" @click="openFolio(r)"
+                        class="flex-1 rounded-lg bg-brand-700 px-3 py-2 text-xs font-semibold text-white
+                               transition hover:bg-brand-600">Check out</button>
+                <button @click="openFolio(r)"
+                        class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600
+                               transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300
+                               dark:hover:bg-slate-800">Folio</button>
+                <button x-show="col.key === 'arrivals'" @click="cancel(r)"
+                        class="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600
+                               transition hover:bg-red-50 dark:border-red-500/30 dark:hover:bg-red-500/10">Cancel</button>
+              </div>
+            </article>
+          </template>
+        </div>
+      </section>
+    </template>
+  </div>
+
+  {# --------------------------------------------------------- folio drawer #}
+  <div x-show="folio.open" style="display:none" class="fixed inset-0 z-40 flex justify-end">
+    <div @click="folio.open = false" x-transition.opacity class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+
+    <aside x-transition:enter="transition duration-200" x-transition:enter-start="translate-x-full"
+           x-transition:enter-end="translate-x-0"
+           class="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl dark:bg-slate-900">
+      <header class="flex items-start justify-between border-b border-slate-200 p-5 dark:border-slate-800">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Guest folio</p>
+          <h2 class="mt-1 text-lg font-bold text-slate-900 dark:text-white" x-text="folio.data.guest_name || '—'"></h2>
+          <p class="font-mono text-xs text-slate-400" x-text="folio.data.reservation_reference"></p>
+        </div>
+        <button @click="folio.open = false" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+
+      <div class="flex-1 space-y-5 overflow-y-auto p-5">
+        <div x-show="folio.loading" class="space-y-3">
+          <div class="skeleton h-4 w-full"></div><div class="skeleton h-4 w-3/4"></div><div class="skeleton h-24 w-full"></div>
+        </div>
+
+        <div x-show="!folio.loading" style="display:none" class="space-y-5">
+          <div class="space-y-2">
+            <template x-for="line in folio.data.lines || []" :key="line.label">
+              <div class="flex items-start justify-between gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium text-slate-800 dark:text-slate-200" x-text="line.label"></p>
+                  <p class="text-xs text-slate-500" x-text="line.detail"></p>
+                </div>
+                <span class="shrink-0 text-sm font-semibold text-slate-900 dark:text-white" x-text="fmt.money(line.amount)"></span>
+              </div>
+            </template>
+          </div>
+
+          <dl class="space-y-2 border-t border-slate-200 pt-4 text-sm dark:border-slate-800">
+            <div class="flex justify-between"><dt class="text-slate-500">Subtotal</dt>
+              <dd class="font-medium text-slate-900 dark:text-white" x-text="fmt.money(folio.data.subtotal)"></dd></div>
+            <div class="flex justify-between"><dt class="text-slate-500" x-text="`VAT (${(window.APP.taxRate*100).toFixed(0)}%)`"></dt>
+              <dd class="font-medium text-slate-900 dark:text-white" x-text="fmt.money(folio.data.tax_amount)"></dd></div>
+            <div class="flex justify-between border-t border-slate-200 pt-2 dark:border-slate-800">
+              <dt class="font-semibold text-slate-900 dark:text-white">Total</dt>
+              <dd class="font-bold text-slate-900 dark:text-white" x-text="fmt.money(folio.data.total)"></dd></div>
+            <div class="flex justify-between"><dt class="text-slate-500">Paid</dt>
+              <dd class="font-medium text-accent-600 dark:text-accent-300" x-text="`− ${fmt.money(folio.data.amount_paid)}`"></dd></div>
+            <div class="flex justify-between rounded-xl px-3 py-2.5"
+                 :class="Number(folio.data.balance_due) > 0
+                   ? 'bg-red-50 dark:bg-red-500/10' : 'bg-accent-50 dark:bg-accent-500/10'">
+              <dt class="font-semibold" :class="Number(folio.data.balance_due) > 0 ? 'text-red-700 dark:text-red-300' : 'text-accent-700 dark:text-accent-300'">Balance due</dt>
+              <dd class="font-bold" :class="Number(folio.data.balance_due) > 0 ? 'text-red-700 dark:text-red-300' : 'text-accent-700 dark:text-accent-300'"
+                  x-text="fmt.money(folio.data.balance_due)"></dd></div>
+          </dl>
+
+          {# take payment #}
+          <div x-show="Number(folio.data.balance_due) > 0" style="display:none"
+               class="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+            <p class="text-sm font-semibold text-slate-900 dark:text-white">Take payment</p>
+            <div class="mt-3 grid grid-cols-2 gap-2">
+              <input type="number" step="0.01" min="0.01" x-model="payment.amount" placeholder="Amount"
+                     class="rounded-lg border-slate-300 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+              <select x-model="payment.method"
+                      class="rounded-lg border-slate-300 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+                <option value="cash">Cash</option><option value="card">Card</option>
+                <option value="transfer">Transfer</option><option value="online">Online</option>
+              </select>
+            </div>
+            <button @click="takePayment()" :disabled="payment.busy"
+                    class="mt-3 w-full rounded-lg bg-accent-500 py-2 text-sm font-semibold text-white
+                           transition hover:bg-accent-600 disabled:opacity-50">
+              <span x-text="payment.busy ? 'Recording…' : 'Record payment'"></span>
+            </button>
+          </div>
+
+          <div x-show="folio.payments.length" style="display:none">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Payment history</p>
+            <div class="mt-2 space-y-1.5">
+              <template x-for="p in folio.payments" :key="p.id">
+                <div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-800/60">
+                  <span class="text-slate-600 dark:text-slate-300" x-text="`${fmt.titleCase(p.method)} · ${fmt.date(p.paid_at || p.created_at)}`"></span>
+                  <span class="flex items-center gap-2">
+                    <span class="rounded px-1.5 py-0.5 font-semibold" :class="badgeClass(p.status)" x-text="fmt.titleCase(p.status)"></span>
+                    <span class="font-semibold text-slate-900 dark:text-white" x-text="fmt.money(p.amount)"></span>
+                  </span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="grid grid-cols-2 gap-2 border-t border-slate-200 p-5 dark:border-slate-800">
+        <a :href="`/api/v1/invoices/reservation/${folio.reservationId}/pdf`" target="_blank"
+           class="rounded-xl border border-slate-300 px-4 py-2.5 text-center text-sm font-semibold text-slate-700
+                  transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+          Invoice PDF
+        </a>
+        <button @click="doCheckOut()" :disabled="folio.busy"
+                x-show="folio.reservation && folio.reservation.status === 'checked_in'"
+                class="rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white transition
+                       hover:bg-brand-600 disabled:opacity-50">
+          <span x-text="folio.busy ? 'Checking out…' : 'Check out'"></span>
+        </button>
+      </footer>
+    </aside>
+  </div>
+
+  {{ confirm_dialog() }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EMPTY_ICONS = {
+  arrivals: '<svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>',
+  departures: '<svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
+  in_house: '<svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>',
+};
+
+function frontDesk() {
+  return {
+    ...confirmMixin(),
+    loading: true,
+    busy: null,
+    query: '',
+    searching: false,
+    results: [],
+    columns: [],
+    payment: { amount: '', method: 'cash', busy: false },
+    folio: { open: false, loading: false, busy: false, data: {}, payments: [], reservationId: null, reservation: null },
+
+    async load() {
+      try {
+        const board = await api('/api/v1/reservations/front-desk');
+        this.columns = [
+          {
+            key: 'arrivals', title: 'Expected arrivals', subtitle: 'Due to check in today',
+            items: board.arrivals, badge: 'bg-brand-50 text-brand-700 dark:bg-brand-700/20 dark:text-brand-200',
+            emptyIcon: EMPTY_ICONS.arrivals, emptyTitle: 'No arrivals today',
+            emptyBody: 'Nothing is booked to start today.',
+          },
+          {
+            key: 'departures', title: 'Departures', subtitle: 'Checking out today',
+            items: board.departures, badge: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+            emptyIcon: EMPTY_ICONS.departures, emptyTitle: 'No departures today',
+            emptyBody: 'All in-house guests are staying on.',
+          },
+          {
+            key: 'in_house', title: 'In house', subtitle: 'Currently staying', items: board.in_house,
+            badge: 'bg-accent-50 text-accent-700 dark:bg-accent-500/15 dark:text-accent-300',
+            emptyIcon: EMPTY_ICONS.in_house, emptyTitle: 'No guests in house',
+            emptyBody: 'The hotel is empty right now.',
+          },
+        ];
+        this.loading = false;
+        this.openFromUrl();
+      } catch (err) {
+        this.loading = false;
+        toastError('Could not load the front desk', err.message);
+      }
+    },
+
+    openFromUrl() {
+      const ref = new URLSearchParams(window.location.search).get('ref');
+      if (!ref) return;
+      const all = this.columns.flatMap((c) => c.items);
+      const match = all.find((r) => r.reference === ref);
+      if (match) this.openFolio(match);
+    },
+
+    async search() {
+      if (this.query.trim().length < 2) { this.results = []; return; }
+      this.searching = true;
+      try {
+        const page = await api('/api/v1/reservations', { params: { q: this.query.trim(), size: 6 } });
+        this.results = page.items;
+      } catch (err) {
+        toastError('Search failed', err.message);
+      } finally {
+        this.searching = false;
+      }
+    },
+
+    select(reservation) {
+      this.results = [];
+      this.query = '';
+      this.openFolio(reservation);
+    },
+
+    async doCheckIn(reservation) {
+      this.busy = reservation.id;
+      try {
+        await api(`/api/v1/reservations/${reservation.id}/check-in`, { method: 'POST' });
+        toastSuccess('Checked in', `${reservation.guest.full_name} → room ${reservation.room.room_number}`);
+        await this.load();
+      } catch (err) {
+        toastError('Check-in failed', err.message);
+      } finally {
+        this.busy = null;
+      }
+    },
+
+    async cancel(reservation) {
+      const ok = await this.askConfirm(
+        'Cancel this reservation?',
+        `${reservation.guest.full_name} · room ${reservation.room.room_number}. This frees the room for other bookings.`,
+        { confirmLabel: 'Cancel booking' }
+      );
+      if (!ok) return;
+      try {
+        await api(`/api/v1/reservations/${reservation.id}/cancel`, {
+          method: 'POST', body: { reason: 'Cancelled at front desk' },
+        });
+        toastSuccess('Reservation cancelled', reservation.reference);
+        await this.load();
+      } catch (err) {
+        toastError('Could not cancel', err.message);
+      }
+    },
+
+    async openFolio(reservation) {
+      this.folio = { ...this.folio, open: true, loading: true, reservationId: reservation.id, reservation };
+      this.payment = { amount: '', method: 'cash', busy: false };
+      try {
+        const [data, payments] = await Promise.all([
+          api(`/api/v1/payments/folio/${reservation.id}`),
+          api(`/api/v1/payments/reservation/${reservation.id}`),
+        ]);
+        this.folio.data = data;
+        this.folio.payments = payments;
+        if (Number(data.balance_due) > 0) this.payment.amount = Number(data.balance_due).toFixed(2);
+      } catch (err) {
+        toastError('Could not load the folio', err.message);
+      } finally {
+        this.folio.loading = false;
+      }
+    },
+
+    async takePayment() {
+      const amount = Number(this.payment.amount);
+      if (!amount || amount <= 0) { toastError('Enter an amount greater than zero'); return; }
+      this.payment.busy = true;
+      try {
+        await api('/api/v1/payments', {
+          method: 'POST',
+          body: { reservation_id: this.folio.reservationId, amount, method: this.payment.method, status: 'paid' },
+        });
+        toastSuccess('Payment recorded', fmt.money(amount));
+        await this.openFolio(this.folio.reservation);
+      } catch (err) {
+        toastError('Payment failed', err.message);
+      } finally {
+        this.payment.busy = false;
+      }
+    },
+
+    async doCheckOut() {
+      const balance = Number(this.folio.data.balance_due || 0);
+      let allowOutstanding = false;
+
+      if (balance > 0) {
+        const ok = await this.askConfirm(
+          'Check out with a balance?',
+          `${fmt.money(balance)} is still owed. Continuing leaves the account open.`,
+          { confirmLabel: 'Check out anyway' }
+        );
+        if (!ok) return;
+        allowOutstanding = true;
+      }
+
+      this.folio.busy = true;
+      try {
+        await api(`/api/v1/reservations/${this.folio.reservationId}/check-out`, {
+          method: 'POST', params: { allow_outstanding_balance: allowOutstanding },
+        });
+        await api(`/api/v1/invoices/reservation/${this.folio.reservationId}`, { method: 'POST' });
+        toastSuccess('Checked out', 'Invoice issued and the room is flagged for cleaning.');
+        this.folio.open = false;
+        await this.load();
+      } catch (err) {
+        toastError('Check-out failed', err.message);
+      } finally {
+        this.folio.busy = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

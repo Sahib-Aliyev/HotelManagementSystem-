@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% from "partials/confirm.html" import confirm_dialog %}
+{% block title %}Rooms · {{ app_name }}{% endblock %}
+{% block breadcrumb %}Rooms{% endblock %}
+{% block heading %}Room inventory{% endblock %}
+
+{% block content %}
+<div x-data="roomsPage()" x-init="load()" class="space-y-5">
+
+  {# ------------------------------------------------------- status strip #}
+  <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <template x-for="s in statusCards" :key="s.key">
+      <button @click="filters.status = filters.status === s.key ? '' : s.key; apply()"
+              class="rounded-2xl border bg-white p-4 text-left transition dark:bg-slate-900"
+              :class="filters.status === s.key
+                ? 'border-brand-500 ring-2 ring-brand-500/30'
+                : 'border-slate-200 hover:border-slate-300 dark:border-slate-800'">
+        <div class="flex items-center gap-2">
+          <span class="h-2.5 w-2.5 rounded-full" :style="`background:${s.color}`"></span>
+          <span class="text-xs font-semibold uppercase tracking-wide text-slate-500" x-text="s.label"></span>
+        </div>
+        <p class="mt-2 text-2xl font-bold text-slate-900 dark:text-white" x-text="s.value"></p>
+      </button>
+    </template>
+  </div>
+
+  {# ------------------------------------------------------------ filters #}
+  <div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm
+              dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center">
+    <select x-model="filters.room_type_id" @change="apply()"
+            class="rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+      <option value="">All room types</option>
+      {% for rt in room_types %}
+      <option value="{{ rt.id }}">{{ rt.name }} — {{ '%.0f'|format(rt.base_price) }} {{ currency }}</option>
+      {% endfor %}
+    </select>
+
+    <select x-model="filters.floor" @change="apply()"
+            class="rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+      <option value="">All floors</option>
+      <template x-for="f in floors" :key="f">
+        <option :value="f" x-text="`Floor ${f}`"></option>
+      </template>
+    </select>
+
+    <div class="relative flex-1">
+      <input type="search" x-model="search" placeholder="Room number or guest name…"
+             class="w-full rounded-xl border-slate-300 py-2.5 pl-3.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+    </div>
+
+    <button @click="reset()" x-show="filters.status || filters.room_type_id || filters.floor || search" style="display:none"
+            class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-600
+                   transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+      Clear filters
+    </button>
+  </div>
+
+  {# --------------------------------------------------------- room grid #}
+  <div x-show="loading" class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+    <template x-for="i in 10" :key="i">
+      <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <div class="skeleton h-6 w-16"></div>
+        <div class="skeleton mt-3 h-3 w-24"></div>
+        <div class="skeleton mt-4 h-8 w-full"></div>
+      </div>
+    </template>
+  </div>
+
+  <div x-show="!loading && !visible.length" style="display:none"
+       class="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center
+              dark:border-slate-700 dark:bg-slate-900">
+    <div class="grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 dark:bg-slate-800">
+      <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+        <circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L21 2m-4 0h4v4"/>
+      </svg>
+    </div>
+    <p class="mt-4 text-sm font-semibold text-slate-700 dark:text-slate-200">No rooms match these filters</p>
+    <p class="mt-1 max-w-xs text-xs text-slate-500">Try clearing the filters, or add rooms from the settings page.</p>
+    <button @click="reset()" class="mt-4 rounded-xl bg-brand-700 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600">
+      Clear filters
+    </button>
+  </div>
+
+  <div x-show="!loading && visible.length" style="display:none"
+       class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+    <template x-for="entry in visible" :key="entry.room.id">
+      <article class="room-card group relative overflow-hidden rounded-2xl border border-slate-200 bg-white
+                      shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <span class="absolute inset-x-0 top-0 h-1" :style="`background:${statusColor(entry.room.status)}`"></span>
+
+        <div class="p-4">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xl font-bold text-slate-900 dark:text-white" x-text="entry.room.room_number"></p>
+              <p class="text-xs text-slate-500" x-text="entry.room.room_type.name"></p>
+            </div>
+            <span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                  :class="badgeClass(entry.room.status)" x-text="fmt.titleCase(entry.room.status)"></span>
+          </div>
+
+          <p class="mt-2 text-xs text-slate-400">
+            Floor <span x-text="entry.room.floor"></span> ·
+            <span x-text="`${entry.room.room_type.capacity} guest(s)`"></span> ·
+            <span class="font-semibold text-slate-600 dark:text-slate-300"
+                  x-text="fmt.money(entry.room.room_type.base_price)"></span>
+          </p>
+
+          <div class="mt-3 min-h-[52px] rounded-xl bg-slate-50 p-2.5 dark:bg-slate-800/60">
+            <template x-if="entry.occupant">
+              <div>
+                <p class="truncate text-xs font-semibold text-slate-800 dark:text-slate-100" x-text="entry.occupant.guest.full_name"></p>
+                <p class="truncate text-[11px] text-slate-500"
+                   x-text="`Out ${fmt.dateShort(entry.occupant.check_out_date)} · ${entry.occupant.reference}`"></p>
+              </div>
+            </template>
+            <template x-if="!entry.occupant && entry.upcoming">
+              <div>
+                <p class="truncate text-xs font-medium text-slate-600 dark:text-slate-300">Next arrival</p>
+                <p class="truncate text-[11px] text-slate-500"
+                   x-text="`${entry.upcoming.guest.full_name} · ${fmt.dateShort(entry.upcoming.check_in_date)}`"></p>
+              </div>
+            </template>
+            <template x-if="!entry.occupant && !entry.upcoming">
+              <p class="text-[11px] text-slate-400">Free — no upcoming bookings</p>
+            </template>
+          </div>
+
+          <div class="mt-3 flex gap-1.5">
+            <button x-show="entry.room.status === 'cleaning'" @click="setStatus(entry, 'available')"
+                    class="flex-1 rounded-lg bg-accent-500 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-accent-600">
+              Mark clean
+            </button>
+            <button x-show="entry.room.status === 'available' && !entry.occupant"
+                    @click="book(entry)"
+                    class="flex-1 rounded-lg bg-brand-700 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-600">
+              Book
+            </button>
+            <button x-show="entry.room.status === 'maintenance'" @click="setStatus(entry, 'available')"
+                    class="flex-1 rounded-lg bg-brand-700 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-600">
+              Return to service
+            </button>
+
+            <div x-data="{ open: false }" class="relative">
+              <button @click="open = !open" @click.outside="open = false"
+                      class="rounded-lg border border-slate-300 p-1.5 text-slate-500 transition hover:bg-slate-50
+                             dark:border-slate-700 dark:hover:bg-slate-800">
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+                </svg>
+              </button>
+              <div x-show="open" x-transition style="display:none"
+                   class="absolute right-0 z-10 mt-1 w-44 overflow-hidden rounded-xl border border-slate-200
+                          bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                <button @click="setStatus(entry, 'cleaning'); open = false"
+                        class="block w-full px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50
+                               dark:text-slate-300 dark:hover:bg-slate-700">Flag for cleaning</button>
+                <button @click="setStatus(entry, 'maintenance'); open = false"
+                        class="block w-full px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50
+                               dark:text-slate-300 dark:hover:bg-slate-700">Take out of service</button>
+                <a :href="`/reservations?q=${entry.room.room_number}`"
+                   class="block w-full px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50
+                          dark:text-slate-300 dark:hover:bg-slate-700">View bookings</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </template>
+  </div>
+
+  {{ confirm_dialog() }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ROOM_STATUS_COLORS = {
+  available: '#10B981', occupied: '#ef4444', cleaning: '#f59e0b', maintenance: '#94a3b8',
+};
+
+function roomsPage() {
+  return {
+    ...confirmMixin(),
+    loading: true,
+    rooms: [],
+    board: {},
+    search: '',
+    filters: { status: '', room_type_id: '', floor: '' },
+    statusCards: [],
+
+    get floors() {
+      return [...new Set(this.rooms.map((e) => e.room.floor))].sort((a, b) => a - b);
+    },
+
+    get visible() {
+      const term = this.search.trim().toLowerCase();
+      return this.rooms.filter((entry) => {
+        const r = entry.room;
+        if (this.filters.status && r.status !== this.filters.status) return false;
+        if (this.filters.room_type_id && String(r.room_type.id) !== String(this.filters.room_type_id)) return false;
+        if (this.filters.floor && String(r.floor) !== String(this.filters.floor)) return false;
+        if (!term) return true;
+        const guest = entry.occupant?.guest.full_name || entry.upcoming?.guest.full_name || '';
+        return r.room_number.toLowerCase().includes(term) || guest.toLowerCase().includes(term);
+      });
+    },
+
+    async load() {
+      try {
+        const today = window.APP.today;
+        // Each call is bounded by something that can never exceed the room
+        // count (one active stay, or one "next" booking, per room) — never
+        // by total reservation volume, so pagination can't silently drop rows.
+        const [rooms, summary, occupied, pending, confirmed] = await Promise.all([
+          api('/api/v1/rooms'),
+          api('/api/v1/rooms/status-summary'),
+          api('/api/v1/reservations', { params: { status: 'checked_in', size: 100 } }),
+          api('/api/v1/reservations', { params: { status: 'pending', date_from: today, order: 'asc', size: 100 } }),
+          api('/api/v1/reservations', { params: { status: 'confirmed', date_from: today, order: 'asc', size: 100 } }),
+        ]);
+
+        const byRoom = {};
+        for (const r of occupied.items) {
+          byRoom[r.room.id] = { occupant: r };
+        }
+        for (const r of [...pending.items, ...confirmed.items].sort((a, b) => (a.check_in_date < b.check_in_date ? -1 : 1))) {
+          if (byRoom[r.room.id]?.occupant || byRoom[r.room.id]?.upcoming) continue;
+          byRoom[r.room.id] = { ...(byRoom[r.room.id] || {}), upcoming: r };
+        }
+
+        this.rooms = rooms.map((room) => ({
+          room,
+          occupant: byRoom[room.id]?.occupant || null,
+          upcoming: byRoom[room.id]?.upcoming || null,
+        }));
+
+        this.statusCards = ['available', 'occupied', 'cleaning', 'maintenance'].map((key) => ({
+          key,
+          label: fmt.titleCase(key),
+          value: summary[key] ?? 0,
+          color: ROOM_STATUS_COLORS[key],
+        }));
+
+        this.loading = false;
+      } catch (err) {
+        this.loading = false;
+        toastError('Could not load rooms', err.message);
+      }
+    },
+
+    statusColor(status) {
+      return ROOM_STATUS_COLORS[status] || '#94a3b8';
+    },
+
+    apply() { /* the `visible` getter reacts to filter changes */ },
+
+    reset() {
+      this.filters = { status: '', room_type_id: '', floor: '' };
+      this.search = '';
+    },
+
+    async setStatus(entry, status) {
+      if (status === 'maintenance') {
+        const ok = await this.askConfirm(
+          `Take room ${entry.room.room_number} out of service?`,
+          'It will stop appearing in availability searches until it is returned to service.',
+          { confirmLabel: 'Take out of service' }
+        );
+        if (!ok) return;
+      }
+      try {
+        await api(`/api/v1/rooms/${entry.room.id}/status`, {
+          method: 'POST', params: { new_status: status },
+        });
+        toastSuccess(`Room ${entry.room.room_number} updated`, fmt.titleCase(status));
+        this.loading = true;
+        await this.load();
+      } catch (err) {
+        toastError('Could not update the room', err.message);
+      }
+    },
+
+    book(entry) {
+      window.location.href = `/reservations/new?room_id=${entry.room.id}`;
+    },
+  };
+}
+</script>
+{% endblock %}
