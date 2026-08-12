@@ -44,6 +44,9 @@ Bunlar audit nəticəsində qoyulub; pozulsa, testlər qırılır (`tests/test_s
 
 ## Bilinən məhdudiyyətlər
 
+Açıq qalan təhlükəsizlik işləri və yayımdan əvvəlki checklist ayrıca fayldadır:
+**`SECURITY-TODO.md`**. Aşağıdakılar isə bilərəkdən qəbul edilmiş məhdudiyyətlərdir.
+
 - E-poçt bildirişləri yoxdur, tək valyuta dəstəyi var (`.env`-dəki `CURRENCY`).
 - CSP hələ `unsafe-inline`/`unsafe-eval` saxlayır, çünki Tailwind/Alpine/Chart.js CDN-dən gəlir və Tailwind brauzerdə kompilyasiya edir. Bu üç faylı layihəyə köçürmək (vendor) CSP-ni tam sərtləşdirməyə imkan verər.
 - Rate limit IP əsaslıdır və yaddaşdadır: proxy arxasında real client IP ötürülməlidir, birdən çox instansiyada isə Redis kimi paylaşılan storage lazımdır.
