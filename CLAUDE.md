@@ -37,6 +37,16 @@ Qat ardıcıllığı sabitdir: `routers/api` → `services` → `repositories` �
 - `.env`-dəki `SECRET_KEY` yalnız development üçündür, real yayımdan əvvəl dəyişdirilməlidir.
 - `nightly_rate` override-i (`ReservationCreate`) rol səviyyəsində serverdə qorunmur — frontend bu sahəni yalnız menecerlərə göstərir, amma API-yə birbaşa müraciət edən istənilən `StaffUser` onu göndərə bilər. Hələ görünməyib, amma "role yoxlaması yalnız UI-da bitməməlidir" qaydasına bir istisnadır.
 
+## Növbəti addım
+
+- [ ] `nightly_rate` override-ə server-side rol yoxlaması əlavə et (`app/routers/api/reservations.py` — `create_reservation`/`create_walk_in`, hazırda `CurrentUser`, `ManagerUser` olmalıdır ya da servis daxilində manual yoxlama). Sahib özü yazacaq.
+
+## Git / commit qaydası
+
+- Push etməzdən əvvəl hər commit-ə **geniş və təfərrüatlı description** yaz: nə dəyişdi, niyə dəyişdi, hansı fayllara təsir etdi. Tək sətir "fix bug" kimi mesajlar kifayət etmir.
+- Format: birinci sətir qısa xülasə, boş sətirdən sonra bullet-lərlə səbəb və detallar.
+- Məqsəd: gələcəkdə tarixçəyə baxanda (Sahib və ya Claude) nəyin niyə edildiyini oxumaqla anlamaq, kod-a yenidən baxmadan.
+
 ## Düzəldilmiş bug-lar (tarixçə üçün)
 
 - ~~Walk-in rezervasiyada menecer qiymət override-i işləmirdi~~ — `QuickBookingCreate`-ə `nightly_rate` əlavə edildi, `new_reservation.html`-də `common` obyektinə köçürüldü. Regressiya testi: `tests/test_reservations.py::test_walk_in_honours_a_nightly_rate_override`.
