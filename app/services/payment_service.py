@@ -12,6 +12,7 @@ from app.models.reservation import ReservationStatus
 from app.repositories.payment_repo import PaymentRepository
 from app.repositories.reservation_repo import ReservationRepository
 from app.schemas.payment import Folio, FolioLine, PaymentCreate
+from app.services.pricing import total_due
 
 CENTS = Decimal("0.01")
 
@@ -33,7 +34,7 @@ class PaymentService:
             raise ConflictError("Cannot take payment on a cancelled reservation.")
 
         paid = await self.reservations.amount_paid(reservation.id)
-        outstanding = (Decimal(reservation.total_price) - paid).quantize(CENTS)
+        outstanding = (total_due(reservation) - paid).quantize(CENTS)
         if payload.status == PaymentStatus.PAID and payload.amount > outstanding:
             raise ValidationError(
                 f"Payment of {payload.amount} exceeds the outstanding balance "
@@ -84,12 +85,13 @@ class PaymentService:
         ]
 
         subtotal = accommodation
-        tax_amount = (subtotal * Decimal(str(settings.TAX_RATE))).quantize(CENTS)
-        total = (subtotal + tax_amount).quantize(CENTS)
+        total = total_due(reservation)
+        tax_amount = (total - subtotal).quantize(CENTS)
 
-        # total_price is stored net of tax; the folio shows tax explicitly.
+        # total_price is stored net of tax; VAT is added on top and owed
+        # along with it — the balance below is what check-out checks too.
         paid = await self.reservations.amount_paid(reservation.id)
-        balance = (Decimal(reservation.total_price) - paid).quantize(CENTS)
+        balance = (total - paid).quantize(CENTS)
 
         return Folio(
             reservation_reference=reservation.reference,

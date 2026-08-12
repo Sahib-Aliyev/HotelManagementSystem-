@@ -45,6 +45,11 @@ The layer order is fixed: `routers/api` → `services` → `repositories` → SQ
   "Fixed bugs".
 - Hiding a button in the UI is not a role check. Every endpoint must enforce it
   server-side too, via the dependencies in `app/core/deps.py`.
+- **Never compare a payment against `Reservation.total_price` directly** —
+  it is net of tax. What the guest actually owes is
+  `app/services/pricing.py::total_due()`, which adds VAT. Using
+  `total_price` alone lets a guest check out having paid the room charge but
+  never the tax — see "Fixed bugs".
 
 ## Security rules
 
@@ -168,3 +173,13 @@ accepted.
   `app/repositories/base.py` neutralises them, and both call sites pass
   `escape=LIKE_ESCAPE`. This was never SQL injection — the queries are
   parameterised — but on a large table it was a full scan.
+- ~~A guest could check out having paid the room charge but never the VAT~~ —
+  `PaymentService.folio()`, `PaymentService.record()` and
+  `ReservationService.balance()` all computed the amount owed as
+  `Reservation.total_price - paid`, and `total_price` is stored net of tax.
+  Once the pre-tax accommodation charge was paid, `balance_due` read `0.00`
+  and check-out proceeded with the VAT never collected. All three now go
+  through `app/services/pricing.py::total_due()`, the one place that adds VAT
+  to what is owed. Found from a screenshot of the folio widget showing
+  `Total 637.20`, `Paid 540.00`, `Balance due 0.00` — the arithmetic doesn't
+  work unless tax is dropped from the balance calculation.

@@ -300,7 +300,6 @@ async def test_full_stay_lifecycle(reception_client, seeded):
         room_id=room_id, check_in=0, check_out=2,
     )
     reservation_id = booking.json()["id"]
-    total = float(booking.json()["total_price"])
 
     checked_in = await reception_client.post(
         f"/api/v1/reservations/{reservation_id}/check-in"
@@ -318,11 +317,14 @@ async def test_full_stay_lifecycle(reception_client, seeded):
     )
     assert refused.status_code == 409
 
+    # Paying the room charge alone would leave VAT outstanding — pay the
+    # folio's VAT-inclusive total instead.
+    folio = (await reception_client.get(f"/api/v1/payments/folio/{reservation_id}")).json()
     await reception_client.post(
         "/api/v1/payments",
         json={
             "reservation_id": reservation_id,
-            "amount": total,
+            "amount": folio["total"],
             "method": "card",
             "status": "paid",
         },
@@ -399,7 +401,9 @@ async def test_folio_applies_vat_and_tracks_the_balance(reception_client, seeded
     assert float(folio["subtotal"]) == 300.00
     assert float(folio["tax_amount"]) == 54.00  # 18% VAT
     assert float(folio["total"]) == 354.00
-    assert float(folio["balance_due"]) == 300.00
+    # Nothing paid yet, so the whole VAT-inclusive total is owed — not just
+    # the room charge.
+    assert float(folio["balance_due"]) == 354.00
 
     await reception_client.post(
         "/api/v1/payments",
@@ -412,7 +416,7 @@ async def test_folio_applies_vat_and_tracks_the_balance(reception_client, seeded
     )
     folio = (await reception_client.get(f"/api/v1/payments/folio/{reservation_id}")).json()
     assert float(folio["amount_paid"]) == 150.00
-    assert float(folio["balance_due"]) == 150.00
+    assert float(folio["balance_due"]) == 204.00  # 354.00 - 150.00, VAT included
 
 
 async def test_invoice_pdf_is_generated(reception_client, seeded):

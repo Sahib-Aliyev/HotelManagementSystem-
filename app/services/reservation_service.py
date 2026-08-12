@@ -20,6 +20,7 @@ from app.core.exceptions import (
 from app.models.reservation import Reservation, ReservationStatus
 from app.models.room import RoomStatus
 from app.models.user import User, UserRole
+from app.services.pricing import total_due
 from app.repositories.guest_repo import GuestRepository
 from app.repositories.reservation_repo import ReservationRepository
 from app.repositories.room_repo import RoomRepository
@@ -111,9 +112,9 @@ class ReservationService:
         return await self.reservations.search(**kwargs)
 
     async def balance(self, reservation: Reservation) -> tuple[Decimal, Decimal]:
-        """(amount_paid, balance_due) for a reservation."""
+        """(amount_paid, balance_due) for a reservation, VAT included."""
         paid = await self.reservations.amount_paid(reservation.id)
-        due = (Decimal(reservation.total_price) - paid).quantize(Decimal("0.01"))
+        due = (total_due(reservation) - paid).quantize(Decimal("0.01"))
         return paid, due
 
     # -------------------------------------------------------------- creation
