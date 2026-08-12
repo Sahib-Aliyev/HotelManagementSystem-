@@ -1,81 +1,156 @@
 # HotelManagementSystem
 
-Otel qonaq qeydiyyatı və rezervasiya idarəetmə sistemi. FastAPI backend,
-server-render edilən Jinja2 + Alpine.js + TailwindCSS frontend. Tədris/portfolio
-layihəsidir — real otel istifadəçiləri yoxdur, PostgreSQL/SQLite üzərində işləyir.
+Hotel guest registration and reservation management system. FastAPI backend,
+server-rendered Jinja2 + Alpine.js + TailwindCSS frontend. A learning /
+portfolio project — there are no real hotel users; it runs on PostgreSQL or
+SQLite.
 
-## Əmrlər
+## Commands
 
 - Server (dev): `.venv\Scripts\python.exe run.py` → http://127.0.0.1:8000, API docs `/api/docs`
-- Testlər: `.venv\Scripts\python.exe -m pytest -v`
-- Bir test faylı: `.venv\Scripts\python.exe -m pytest tests/test_reservations.py -v`
-- Demo məlumat: `.venv\Scripts\python.exe seed.py` (`--reset` ilə sıfırdan qurur)
-- Yeni migration: `.venv\Scripts\alembic.exe revision --autogenerate -m "..."`
-- Migration tətbiq et: `.venv\Scripts\alembic.exe upgrade head`
-- Tam mühit (Postgres ilə): əvvəlcə `export SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")`, sonra `docker compose up` — compose `APP_ENV=production` ilə işlədiyi üçün açar olmadan qəsdən start etmir
+- Tests: `.venv\Scripts\python.exe -m pytest -v`
+- A single test file: `.venv\Scripts\python.exe -m pytest tests/test_reservations.py -v`
+- Demo data: `.venv\Scripts\python.exe seed.py` (`--reset` rebuilds from scratch)
+- New migration: `.venv\Scripts\alembic.exe revision --autogenerate -m "..."`
+- Apply migrations: `.venv\Scripts\alembic.exe upgrade head`
+- Full stack (with Postgres): first `export SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")`, then `docker compose up` — compose runs with `APP_ENV=production`, so it deliberately refuses to start without a key
 
-## Arxitektura qaydası
+## Architecture rule
 
-Qat ardıcıllığı sabitdir: `routers/api` → `services` → `repositories` → SQLAlchemy model.
+The layer order is fixed: `routers/api` → `services` → `repositories` → SQLAlchemy model.
 
-- Router heç vaxt birbaşa ORM sorğusu yazmır — yalnız uyğun `services/*Service` metodunu çağırır və rolu (`StaffUser`/`ManagerUser`/`AdminUser`) yoxlayır.
-- Bütün SQL sorğuları `repositories/`-də yaşayır — başqa heç bir qatda yoxdur.
-- Biznes qaydası (overbooking, qiymətləndirmə, VAT, lifecycle keçidləri) yalnız `services/`-də yaşayır, router və ya template-də təkrarlanmır.
-- Yeni endpoint əlavə edəndə `app/routers/api/__init__.py`-də uyğun router-i qeydiyyatdan keçirməyi unutma (invoices/staff kimi alt-router-lər ayrıca fayl deyil, mövcud fayllar daxilində əlavə `APIRouter` obyektləridir — məs. `payments.invoices_router`, `auth.staff_router`).
+- A router never writes an ORM query directly — it calls the matching
+  `services/*Service` method and checks the role (`StaffUser` / `ManagerUser` /
+  `AdminUser`).
+- Every SQL query lives in `repositories/` — nowhere else.
+- Business rules (overbooking, pricing, VAT, lifecycle transitions) live only in
+  `services/`, never duplicated in a router or a template.
+- When adding an endpoint, remember to register the router in
+  `app/routers/api/__init__.py`. Sub-routers such as invoices and staff are not
+  separate files but extra `APIRouter` objects inside existing ones — e.g.
+  `payments.invoices_router`, `auth.staff_router`.
 
-## Konvensiyalar
+## Conventions
 
-- Yeni funksiyaya docstring/comment yazma — WHY aydın deyilsə bir sətir kifayətdir, nə etdiyini izah etmə.
-- Yeni biznes qaydası əlavə edəndə mütləq `tests/`-ə uyğun test əlavə et (xüsusən overlap/overbooking, qiymətləndirmə, rol icazələri ilə bağlı hər şey).
-- Frontend-də API çağırışı həmişə `app/static/js/app.js`-dəki `api()` helper-i ilə edilir, birbaşa `fetch()` yazılmır — 401 aşkarlanması və xəta formatı yalnız orada həll olunub.
-- Yeni sahə (field) bir formaya əlavə edəndə onun backend sxemində (`app/schemas/`) və müvafiq bütün yaradılış yollarında (məs. həm `ReservationCreate`, həm `QuickBookingCreate`) mövcud olduğunu yoxla — `nightly_rate` məhz belə bir yoldan itmişdi, bax "Düzəldilmiş bug-lar".
-- Rol yoxlaması UI-da düyməni gizlətməklə bitmir — hər endpoint-də serverdə də yoxlanmalıdır (`app/core/deps.py`-dəki asılılıqlar).
+- Do not add a docstring or comment to a new function just to describe what it
+  does. One line is enough, and only when the WHY is not obvious.
+- Every new business rule needs a matching test in `tests/` — especially
+  anything touching overlap/overbooking, pricing, or role permissions.
+- Frontend API calls always go through the `api()` helper in
+  `app/static/js/app.js`; never call `fetch()` directly. The 401 handling and
+  the error format are implemented only there.
+- When adding a field to a form, check that it exists in the backend schema
+  (`app/schemas/`) and in *every* creation path (e.g. both `ReservationCreate`
+  and `QuickBookingCreate`). `nightly_rate` was lost exactly this way — see
+  "Fixed bugs".
+- Hiding a button in the UI is not a role check. Every endpoint must enforce it
+  server-side too, via the dependencies in `app/core/deps.py`.
 
-## Təhlükəsizlik qaydaları
+## Security rules
 
-Bunlar audit nəticəsində qoyulub; pozulsa, testlər qırılır (`tests/test_security.py`).
+These came out of the security audit. Breaking one breaks a test in
+`tests/test_security.py`.
 
-- **Pul və qiymət sahələri servis qatında yoxlanılır, router-də yox.** `nightly_rate` üç ayrı endpoint-dən gəlir (`create`, `walk-in`, `PATCH`), ona görə icazə yoxlaması `ReservationService._assert_may_set_rate`-dədir — hər üçü oradan keçir. Yeni "yalnız menecer" sahəsi əlavə edəndə eyni nümunəni izlə.
-- **Sxemdə `dict` tipli sahə yazma.** Konkret pydantic modeli istifadə et. `QuickBookingCreate.guest` `dict` idi və səhv giriş 422 əvəzinə 500 qaytarırdı.
-- **Token `pwf` claim-i daşıyır** — istifadəçinin parol hash-inin barmaq izi (`app/core/security.py`). Hər sorğuda yoxlanılır, ona görə parol dəyişdikdə bütün köhnə sessiyalar dərhal ölür. Token-ə yeni claim əlavə edəndə bunu silmə.
-- **Yeni autentifikasiya endpoint-inə rate limit qoy** (`@limiter.limit(...)` — `app/core/ratelimit.py`). Dekorator işləməsi üçün funksiyada `request: Request` parametri **olmalıdır**, əks halda səssizcə heç nə etmir.
-- **Yeni təhlükəsizlik parametri əlavə edəndə** `config.py::_refuse_unsafe_production`-a da yoxlama əlavə et — production dev default-ları ilə start etməməlidir.
-- **Admin sayı**: son aktiv admini deaktiv etmək və ya rolunu aşağı salmaq `AuthService`-də bağlıdır. `deactivate()` və `update_user()` — hər ikisi eyni vəziyyətə apara bilir, ona görə qoruma hər ikisindədir.
+- **Money and pricing fields are authorised in the service layer, not in the
+  router.** `nightly_rate` arrives through three separate endpoints (`create`,
+  `walk-in`, `PATCH`), so the permission check lives in
+  `ReservationService._assert_may_set_rate`, which all three pass through.
+  Follow the same pattern for any new manager-only field.
+- **Never type a schema field as `dict`.** Use a concrete Pydantic model.
+  `QuickBookingCreate.guest` was a `dict`, which skipped guest validation
+  entirely and turned bad input into a 500 instead of a 422.
+- **Tokens carry a `pwf` claim** — a fingerprint of the user's password hash
+  (`app/core/security.py`). It is verified on every request, so changing a
+  password immediately kills every session issued under the old one. Do not
+  drop it when adding new claims.
+- **Rate-limit every new authentication endpoint** (`@limiter.limit(...)` from
+  `app/core/ratelimit.py`). The decorator only works if the function has a
+  `request: Request` parameter — without it the limit silently does nothing.
+- **When adding a security-relevant setting**, add a check to
+  `config.py::_refuse_unsafe_production` as well: production must not boot on
+  development defaults.
+- **Administrator count**: deactivating or demoting the last active admin is
+  blocked in `AuthService`. Both `deactivate()` and `update_user()` can reach
+  that state, so the guard exists in both.
 
-## Bilinən məhdudiyyətlər
+## Known limitations
 
-Açıq qalan təhlükəsizlik işləri və yayımdan əvvəlki checklist ayrıca fayldadır:
-**`SECURITY-TODO.md`**. Aşağıdakılar isə bilərəkdən qəbul edilmiş məhdudiyyətlərdir.
+Open security work and the pre-deployment checklist live in a separate file:
+**`SECURITY-TODO.md`**. What follows is limitations that are deliberately
+accepted.
 
-- E-poçt bildirişləri yoxdur, tək valyuta dəstəyi var (`.env`-dəki `CURRENCY`).
-- CSP hələ `unsafe-inline`/`unsafe-eval` saxlayır, çünki Tailwind/Alpine/Chart.js CDN-dən gəlir və Tailwind brauzerdə kompilyasiya edir. Bu üç faylı layihəyə köçürmək (vendor) CSP-ni tam sərtləşdirməyə imkan verər.
-- Rate limit IP əsaslıdır və yaddaşdadır: proxy arxasında real client IP ötürülməlidir, birdən çox instansiyada isə Redis kimi paylaşılan storage lazımdır.
-- Audit log yoxdur — rezervasiyanı kimin dəyişdiyi (`created_by_id`-dən başqa) saxlanmır.
-- İki faktorlu autentifikasiya yoxdur.
+- No email notifications, and only a single currency (`CURRENCY` in `.env`).
+- The CSP still allows `unsafe-inline` and `unsafe-eval`, because Tailwind,
+  Alpine and Chart.js load from CDNs and Tailwind compiles styles in the
+  browser. Vendoring those three files is what allows a strict CSP.
+- Rate limiting is per-IP and in-memory: behind a proxy the real client IP must
+  be forwarded, and more than one instance needs shared storage such as Redis.
+- No audit log — apart from `created_by_id`, who changed a reservation is not
+  recorded.
+- No two-factor authentication.
 
-## Git / commit qaydası
+## Git / commit rule
 
-- Push etməzdən əvvəl hər commit-ə **geniş və təfərrüatlı description** yaz: nə dəyişdi, niyə dəyişdi, hansı fayllara təsir etdi. Tək sətir "fix bug" kimi mesajlar kifayət etmir.
-- Format: birinci sətir qısa xülasə, boş sətirdən sonra bullet-lərlə səbəb və detallar.
-- Məqsəd: gələcəkdə tarixçəyə baxanda (Sahib və ya Claude) nəyin niyə edildiyini oxumaqla anlamaq, kod-a yenidən baxmadan.
+- Write a **broad and detailed description** on every commit before pushing:
+  what changed, why it changed, which files it touched. A single line like
+  "fix bug" is not enough.
+- Format: a short summary on the first line, a blank line, then bullets with
+  the reasoning and details.
+- The goal: someone reading the history later (Sahib or Claude) should
+  understand what was done and why from the message alone, without re-reading
+  the code.
+- Commit messages themselves stay in Azerbaijani, matching the existing
+  history. Documentation (`*.md`) is written in English.
 
-## Düzəldilmiş bug-lar (tarixçə üçün)
+## Fixed bugs (for the record)
 
-- ~~Walk-in rezervasiyada menecer qiymət override-i işləmirdi~~ — `QuickBookingCreate`-ə `nightly_rate` əlavə edildi, `new_reservation.html`-də `common` obyektinə köçürüldü. Regressiya testi: `tests/test_reservations.py::test_walk_in_honours_a_nightly_rate_override`.
-- ~~Otaqlar səhifəsi 100-dən çox rezervasiya olduqda hazırkı qonaqları itirə bilərdi~~ — `reservations` axtarışına `order=asc` seçimi əlavə edildi; `rooms.html` indi "occupied" (otaq sayı ilə məhdud) və "upcoming" (`date_from` + artan sıra ilə məhdud) üçün ayrı, təbii şəkildə məhdudlaşan sorğular göndərir.
-- ~~Login-də `next` parametri açıq yönləndirmə riski daşıyırdı~~ — indi yalnız `/` ilə başlayan (və `//` ilə başlamayan) nisbi yollar qəbul edilir.
+- ~~The manager rate override did not work on walk-in reservations~~ —
+  `nightly_rate` was added to `QuickBookingCreate` and moved into the `common`
+  object in `new_reservation.html`. Regression test:
+  `tests/test_reservations.py::test_walk_in_honours_a_nightly_rate_override`.
+- ~~The rooms page could lose current guests once there were more than 100
+  reservations~~ — an `order=asc` option was added to the reservation search;
+  `rooms.html` now sends separate, naturally bounded queries for "occupied"
+  (bounded by room count) and "upcoming" (bounded by `date_from` plus ascending
+  order).
+- ~~The `next` parameter on login was an open-redirect risk~~ — only relative
+  paths starting with `/` (and not `//`) are accepted now.
 
-### Təhlükəsizlik auditi (2026-08)
+### Security audit (2026-08)
 
-- ~~Login endpoint-i brute-force-a tam açıq idi~~ — `slowapi` quraşdırılmışdı, `app.state.limiter` təyin edilmişdi, amma heç bir endpoint-də `@limiter.limit` yox idi və `default_limits=[]` idi, yəni nəzarət tamamilə ölü idi. İndi `/auth/login` 10/dəq, `/auth/change-password` 5/dəq (`app/core/ratelimit.py`).
-- ~~Resepsiyonist `nightly_rate` göndərərək istənilən qiymətə rezervasiya aça bilirdi~~ — üç endpoint-də də (`create`, `walk-in`, `PATCH`) icazə yoxlanılmırdı; `PATCH` yolu əvvəllər sənədləşdirilməmişdi. İndi `ReservationService._assert_may_set_rate` hamısını əhatə edir.
-- ~~`PATCH /staff/{id}` son admini deaktiv edə və ya rolunu aşağı sala bilirdi~~ — `deactivate()`-də qoruma var idi, amma PATCH eyni vəziyyətə `role`/`is_active` sahələri ilə yan yoldan çatırdı və sistemi adminsiz qoya bilirdi.
-- ~~Parol dəyişmək köhnə sessiyaları ləğv etmirdi~~ — oğurlanmış token 12 saat işləməyə davam edirdi. İndi token parol hash-inin barmaq izini (`pwf`) daşıyır və hər sorğuda yoxlanılır; parol dəyişən istifadəçinin öz sessiyası avtomatik yenilənir.
-- ~~Naməlum e-poçtla login bcrypt-i tamamilə atlayırdı~~ — cavab müddəti hansı ünvanların qeydiyyatda olduğunu açırdı, halbuki mesaj qəsdən eyni idi. İndi hər iki yol bir bcrypt raundu ödəyir (`waste_password_time`).
-- ~~Production dev default-ları ilə start edirdi~~ — placeholder `SECRET_KEY` sessiya imzalaya bilirdi. İndi `config.py::_refuse_unsafe_production` boot-da imtina edir (default/qısa açar, `DEBUG=true`, `CORS_ORIGINS=*`).
-- ~~`/api/docs` və OpenAPI sxemi production-da açıq idi~~ — indi yalnız development-də açılır.
-- ~~`QuickBookingCreate.guest` tipsiz `dict` idi~~ — qonaq validasiyası tam atlanırdı və səhv giriş 500 qaytarırdı; indi `GuestCreate`.
-- ~~Cavablarda CSP, HSTS və `Cache-Control` yox idi~~ — qonaq PII-si (pasport, telefon, ünvan) brauzer keşində qala bilirdi. İndi bütün qeyri-static cavablar `no-store`.
-- ~~`/health` `APP_ENV`-i açırdı~~ — indi yalnız `{"status": "ok"}`.
-- ~~Parol siyasəti 8 simvol idi, sinif tələbi yox idi~~ — indi 10 simvol + böyük/kiçik hərf + rəqəm, və yeni parol köhnəsindən fərqli olmalıdır.
-- ~~`python-jose 3.3.0`~~ — CVE-2024-33663 və CVE-2024-33664; 3.4.0-a yüksəldildi.
+- ~~The login endpoint was wide open to brute force~~ — `slowapi` was
+  installed and `app.state.limiter` was set, but `default_limits` was empty and
+  no endpoint carried `@limiter.limit`, so the control was entirely dead. Now
+  `/auth/login` is 10/min and `/auth/change-password` is 5/min
+  (`app/core/ratelimit.py`).
+- ~~A receptionist could book at any price by sending `nightly_rate`~~ — none
+  of the three endpoints checked permission, and the `PATCH` path had not been
+  documented at all. `ReservationService._assert_may_set_rate` now covers all
+  three.
+- ~~`PATCH /staff/{id}` could deactivate or demote the last administrator~~ —
+  `deactivate()` had a guard, but PATCH reached the same state sideways through
+  the `role` and `is_active` fields and could leave the system with no admin.
+- ~~Changing a password did not invalidate existing sessions~~ — a stolen token
+  kept working for 12 hours. Tokens now carry a fingerprint of the password
+  hash (`pwf`), verified on every request; the session of the user who changed
+  the password is re-keyed automatically.
+- ~~Logging in with an unknown email skipped bcrypt entirely~~ — response time
+  revealed which addresses were registered, even though the message was
+  deliberately identical. Both paths now pay for one bcrypt round
+  (`waste_password_time`).
+- ~~Production started on development defaults~~ — the placeholder `SECRET_KEY`
+  could sign sessions. `config.py::_refuse_unsafe_production` now refuses at
+  boot (shipped or short key, `DEBUG=true`, `CORS_ORIGINS=*`).
+- ~~`/api/docs` and the OpenAPI schema were public in production~~ — they are
+  enabled only in development now.
+- ~~`QuickBookingCreate.guest` was an untyped `dict`~~ — guest validation was
+  skipped completely and bad input returned a 500; it is `GuestCreate` now.
+- ~~Responses carried no CSP, HSTS or `Cache-Control`~~ — guest PII (passport
+  number, phone, address) could linger in the browser cache. All non-static
+  responses are `no-store` now.
+- ~~`/health` leaked `APP_ENV`~~ — it returns only `{"status": "ok"}`.
+- ~~The password policy was 8 characters with no class requirement~~ — now 10
+  characters plus upper case, lower case and a digit, and the new password must
+  differ from the current one.
+- ~~`python-jose 3.3.0`~~ — CVE-2024-33663 and CVE-2024-33664; upgraded to
+  3.4.0.

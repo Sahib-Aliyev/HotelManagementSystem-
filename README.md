@@ -113,7 +113,7 @@ app/
 └── main.py          app assembly, middleware, error handlers
 
 alembic/             migrations
-tests/               39 tests covering auth, booking rules, money, lifecycle
+tests/               67 tests covering auth, security, booking rules, money, lifecycle
 seed.py              demo hotel: 28 rooms, 15 guests, 175 reservations
 ```
 
@@ -140,7 +140,8 @@ dependencies — the UI hiding a button is a convenience, not the control.
 
 ## API
 
-Interactive docs at **http://127.0.0.1:8000/api/docs**.
+Interactive docs at **http://127.0.0.1:8000/api/docs** (development only — the
+schema is not exposed in production).
 
 ```
 POST   /api/v1/auth/login                        sign in (JWT + httpOnly cookie)
@@ -172,21 +173,35 @@ Errors are uniform, so the frontend renders them without special cases:
 python -m pytest
 ```
 
-39 tests: authentication and role boundaries, every overlap shape, capacity and
+67 tests: authentication and role boundaries, every overlap shape, capacity and
 date validation, the full check-in → pay → check-out lifecycle, VAT and balance
 arithmetic, invoice idempotency, guest document rules. Each test runs against a
 fresh in-memory SQLite database.
+
+`tests/test_security.py` and `tests/test_config.py` are regression tests for the
+2026-08 security audit — rate limiting, privilege escalation on the rate
+override, session invalidation on password change, last-admin lockout, password
+policy, security headers, and the production configuration guard.
 
 ---
 
 ## Deployment
 
 ```bash
+export SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
+```
+
+```bash
 docker compose up --build
 ```
 
 Brings up PostgreSQL, runs `alembic upgrade head`, serves the app on port 8000.
-Set `SECRET_KEY` in the environment first.
+
+Compose runs with `APP_ENV=production`, which refuses to start on development
+defaults — a missing or shipped `SECRET_KEY`, `DEBUG=true`, or `CORS_ORIGINS=*`
+all fail at boot rather than silently serving traffic. The interactive API docs
+are also disabled in production. See [`SECURITY-TODO.md`](SECURITY-TODO.md) for
+the full pre-deployment checklist.
 
 Migrations, when you change a model:
 

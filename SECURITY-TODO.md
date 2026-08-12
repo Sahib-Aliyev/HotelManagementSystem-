@@ -1,139 +1,141 @@
-# Təhlükəsizlik — görüləcək addımlar
+# Security — remaining work
 
-2026-08 auditindən sonra qalan işlər. Auditdə tapılan 11 boşluq artıq
-bağlanıb (commit `89b3dcb`, tarixçə CLAUDE.md-dədir) — bu fayl **hələ
-edilməmiş** addımları saxlayır.
+What is left after the 2026-08 audit. The eleven gaps the audit found are
+already closed (commit `89b3dcb`; the history is in CLAUDE.md) — this file
+tracks the work that has **not** been done yet.
 
-Bir bənd bitəndə onu buradan sil və CLAUDE.md-dəki "Düzəldilmiş bug-lar"
-bölməsinə keçir.
-
----
-
-## 1. Yayımdan (deploy) əvvəl mütləq
-
-Kod dəyişikliyi tələb etmir — konfiqurasiya və mühit məsələləridir.
-`APP_ENV=production` bunlardan bir neçəsini boot-da özü yoxlayır, qalanları
-səssizcə keçir, ona görə siyahını əl ilə keç.
-
-- [ ] **`SECRET_KEY` generasiya et.** `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
-      Production default açarla start etmir, amma açar bir dəfə sızarsa
-      hər kəsin sessiyasını saxtalaşdırmaq olar — açarı dəyişmək bütün
-      mövcud sessiyaları da ləğv edir.
-- [ ] **`CORS_ORIGINS`-i real domenə qoy.** Cookie kredensiallı olduğu üçün
-      `*` boot-da rədd edilir, amma səhv domen yazmaq rədd edilmir.
-- [ ] **`TRUSTED_HOSTS`-u real hostname-lərə qoy.** Hazırda default `*`-dır və
-      bu halda Host başlığı yoxlaması ümumiyyətlə söndürülür.
-- [ ] **HTTPS arxasında işlət.** Sessiya cookie-si `secure` bayrağını və HSTS
-      başlığını yalnız `APP_ENV=production`-da alır; HTTP üzərindən yayımlasan
-      cookie açıq şəkildə gedəcək.
-- [ ] **Proxy arxasındasa real client IP-ni ötür.** Uvicorn-u `--proxy-headers
-      --forwarded-allow-ips=<proxy-ip>` ilə işlət. Bu edilməzsə rate limit
-      bütün istifadəçiləri **bir IP** kimi görəcək: həm brute-force qorumasını
-      faydasız edir, həm də bir nəfərin səhv parolu bütün oteli bloklayır.
-- [ ] **`alembic upgrade head`.** `create_all` yalnız development-də işə düşür.
-- [ ] **`seed.py`-ni production bazasına qarşı işlətmə.** İçində sabit demo
-      parolları var (`Admin1234`, `Manager1234`, `Reception1234`) və onlar
-      modelə birbaşa yazıldığı üçün yeni parol siyasətindən yan keçir —
-      API vasitəsilə belə parol artıq yaradıla bilməz.
+When an item is finished, delete it from here and move it into the "Fixed bugs"
+section of CLAUDE.md.
 
 ---
 
-## 2. Kod dəyişikliyi tələb edən (prioritetlə)
+## 1. Before deploying
 
-### 2.1 Invoice PDF qonaq adından qırılır — *təsdiqlənib*
+No code changes — these are configuration and environment concerns.
+`APP_ENV=production` checks a few of them at boot and lets the rest through
+silently, so walk the list by hand.
 
-**Problem.** `app/services/invoice_service.py:140` qonaq adını, telefonunu və
-e-poçtunu birbaşa reportlab `Paragraph`-a verir. `Paragraph` mətnə mini-XML
-markup kimi baxır, ona görə tərkibində bağlanmamış teq olan ad parse
-xətası ilə 500 qaytarır:
+- [ ] **Generate a `SECRET_KEY`.** `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+      Production will not start on the shipped key, but if the key ever leaks,
+      anyone can forge any user's session. Rotating the key also invalidates
+      every existing session.
+- [ ] **Set `CORS_ORIGINS` to the real domain.** `*` is rejected at boot because
+      the cookie is credentialed, but a wrong domain is not.
+- [ ] **Set `TRUSTED_HOSTS` to the real hostnames.** The default is `*`, which
+      disables the Host header check entirely.
+- [ ] **Serve over HTTPS.** The session cookie only gets its `secure` flag and
+      the HSTS header when `APP_ENV=production`; over plain HTTP the cookie
+      travels in the clear.
+- [ ] **Forward the real client IP if there is a proxy in front.** Run uvicorn
+      with `--proxy-headers --forwarded-allow-ips=<proxy-ip>`. Without this the
+      rate limiter sees **every user as one IP**, which both makes the
+      brute-force protection useless and lets one person's typo lock out the
+      whole hotel.
+- [ ] **Run `alembic upgrade head`.** `create_all` only runs in development.
+- [ ] **Never run `seed.py` against the production database.** It contains
+      fixed demo passwords (`Admin1234`, `Manager1234`, `Reception1234`), and
+      because it writes to the model directly it bypasses the new password
+      policy — those passwords can no longer be created through the API.
+
+---
+
+## 2. Requires code changes (in priority order)
+
+### 2.1 Invoice PDF crashes on some guest names — *confirmed*
+
+**Problem.** `app/services/invoice_service.py:140` passes the guest's name,
+phone and email straight into a ReportLab `Paragraph`. `Paragraph` treats its
+text as a mini-XML markup language, so a name containing something that looks
+like an unclosed tag raises a parse error and returns a 500:
 
 ```
 '<b>Bold Guest'  ->  ValueError: paragraph text '<para><b>Bold Guest<br/>+994</para>' caused exception
 ```
 
-`&` və tək `<` simvolları problem yaratmır — yalnız teqə oxşayan konstruksiya.
+`&` and a bare `<` are fine — only tag-shaped constructs break it.
 
-**Niyə vacibdir.** Səviyyəsi aşağıdır (adı personal daxil edir, kənar
-istifadəçi deyil), amma effekt davamlıdır: belə bir ad bir dəfə bazaya
-düşəndə həmin qonağın invoice-u **daimi olaraq** çıxarıla bilmir və səbəbi
-loga baxmadan aydın olmur.
+**Why it matters.** Severity is low, since staff enter the name rather than an
+outside user, but the effect is persistent: once such a name is in the
+database, that guest's invoice can **never** be generated again, and the reason
+is not obvious without reading the logs.
 
-**Həlli.** PDF-ə gedən bütün istifadəçi mətnini escape et:
+**Fix.** Escape all user-supplied text on its way into the PDF:
 
 ```python
 from xml.sax.saxutils import escape
 Paragraph(f"{escape(reservation.guest.full_name)}<br/>...", value)
 ```
 
-Eyni şey `folio.lines`-dakı `line.label`/`line.detail` üçün də keçərlidir —
-onlar otaq nömrəsi və otaq tipi adından qurulur.
+The same applies to `line.label` and `line.detail` in `folio.lines`, which are
+built from the room number and room type name.
 
-**Test.** `tests/test_security.py`-a: adında `<b>` olan qonaq yarat, invoice
-PDF-i endir, 200 gözlə.
+**Test.** In `tests/test_security.py`: create a guest whose name contains
+`<b>`, download the invoice PDF, expect 200.
 
-### 2.2 CSP-dən `unsafe-inline` və `unsafe-eval`-i çıxar
+### 2.2 Remove `unsafe-inline` and `unsafe-eval` from the CSP
 
-**Problem.** `app/main.py`-dakı CSP hər ikisini saxlayır, çünki Tailwind,
-Alpine.js və Chart.js CDN-dən yüklənir və Tailwind-in brauzer versiyası
-stilləri runtime-da kompilyasiya edir (`eval` tələb edir). Bu iki güzəşt
-CSP-nin XSS-ə qarşı dəyərinin böyük hissəsini yeyir.
+**Problem.** The CSP in `app/main.py` still allows both, because Tailwind,
+Alpine.js and Chart.js load from CDNs and Tailwind's browser build compiles
+styles at runtime (which needs `eval`). These two concessions eat most of the
+CSP's value against XSS.
 
-**Həlli.** Hər üç kitabxananı `app/static/vendor/`-a köçür (Tailwind üçün
-build mərhələsi lazımdır — CDN versiyası deyil, CLI ilə əvvəlcədən
-kompilyasiya edilmiş CSS). Sonra:
+**Fix.** Vendor all three libraries into `app/static/vendor/`. Tailwind needs a
+build step for this — the CLI-compiled CSS, not the CDN build. Then:
 
-- `script-src 'self'` (CDN domenlərini sil)
-- `style-src 'self'` — inline `style=` atributları qalırsa əvvəlcə onları təmizlə
-- Alpine `x-data` kimi atributlar CSP-yə toxunmur, amma Alpine-in özü
-  ifadələri qiymətləndirmək üçün `unsafe-eval` istəyir — Alpine-in
-  **CSP build**-ini (`@alpinejs/csp`) istifadə et, yoxsa bu bənd yarımçıq qalır.
+- `script-src 'self'` (drop the CDN domains)
+- `style-src 'self'` — clean up any inline `style=` attributes first
+- Alpine attributes like `x-data` do not violate CSP, but Alpine itself needs
+  `unsafe-eval` to evaluate expressions. Use Alpine's **CSP build**
+  (`@alpinejs/csp`), otherwise this item stays half-finished.
 
-**Qeyd.** Bu, əlaqəli bir problemi də həll edir: hazırda üç kənar CDN
-kompromis olunsa, otelin bütün sessiyaları oğurlana bilər. Vendorlamaq bu
-asılılığı tamamilə aradan qaldırır.
+**Note.** This also fixes a related exposure: if any of the three CDNs were
+compromised today, every session in the hotel could be stolen. Vendoring
+removes that dependency completely.
 
-### 2.3 Rate limit-i paylaşılan storage-a keçir
+### 2.3 Move rate limiting to shared storage
 
-**Problem.** `app/core/ratelimit.py` limiter-i yaddaşda (`MemoryStorage`)
-sayır. Bir instansiyada işləyir; iki və daha çox uvicorn worker-i və ya
-konteyner olan kimi hər biri öz sayğacını saxlayır və effektiv limit
-worker sayına vurulur.
+**Problem.** The limiter in `app/core/ratelimit.py` counts in memory
+(`MemoryStorage`). That works for a single instance; as soon as there are two
+or more uvicorn workers or containers, each keeps its own counter and the
+effective limit is multiplied by the worker count.
 
-**Həlli.** `Limiter(storage_uri="redis://...")`. `slowapi` bunu birbaşa
-dəstəkləyir, `.env`-ə `RATE_LIMIT_STORAGE_URI` əlavə et və default olaraq
-yaddaşı saxla ki, development quraşdırma tələb etməsin.
+**Fix.** `Limiter(storage_uri="redis://...")`. `slowapi` supports this
+directly. Add `RATE_LIMIT_STORAGE_URI` to `.env` and default it to in-memory so
+development still needs no setup.
 
-### 2.4 Uğursuz login-ləri hesab üzrə də say
+### 2.4 Count failed logins per account as well
 
-**Problem.** Hazırda limit yalnız IP üzrədir. Bot şəbəkəsi (hər IP-dən
-10 cəhd) bir hesaba qarşı yavaş brute-force apara bilir.
+**Problem.** The limit is currently per-IP only. A botnet (ten attempts per IP)
+can still run a slow brute force against a single account.
 
-**Həlli.** IP limitinə əlavə olaraq e-poçt üzrə sayğac: məsələn ardıcıl 10
-uğursuz cəhddən sonra hesabı 15 dəqiqə kilidlə. Diqqət — kilid mesajı
-mövcud olmayan hesab üçün də eyni görünməlidir, əks halda audit-də
-bağladığımız hesab-sayımı sızması geri qayıdır.
+**Fix.** Add a per-email counter alongside the IP limit — for example, lock the
+account for 15 minutes after ten consecutive failures. Careful: the lockout
+response must look identical for an account that does not exist, otherwise the
+account-enumeration leak closed in the audit comes straight back.
 
-### 2.5 Axtarışda LIKE joker simvolları
+### 2.5 LIKE wildcards in search
 
-**Problem.** `app/repositories/reservation_repo.py:64` və qonaq axtarışı
-istifadəçi mətnini birbaşa `LIKE` şablonuna qoyur. `%` yazan istifadəçi
-bütün sətirləri çəkir. SQL injection **deyil** (sorğu parametrlidir), sadəcə
-gözlənilməz nəticə və böyük bazada yavaşlama.
+**Problem.** `app/repositories/reservation_repo.py:64` and the guest search put
+user text directly into a `LIKE` pattern. Someone typing `%` matches every row.
+This is **not** SQL injection — the query is parameterised — just surprising
+results and a slow query on a large database.
 
-**Həlli.** Şablonu qurmazdan əvvəl `%`, `_` və `\` simvollarını escape et və
-`.like(pattern, escape="\\")` istifadə et.
+**Fix.** Escape `%`, `_` and `\` before building the pattern and use
+`.like(pattern, escape="\\")`.
 
 ---
 
-## 3. Uzunmüddətli
+## 3. Longer term
 
-- **Audit log.** Hazırda yalnız `Reservation.created_by_id` saxlanır. Kim
-  qiyməti dəyişdi, kim rezervasiyanı ləğv etdi, kim ödənişi geri qaytardı —
-  heç biri izlənmir. Pul toxunan sistemdə bu, mübahisə yarananda yeganə
-  arqumentdir. Ayrıca `audit_log` cədvəli: aktor, əməliyyat, obyekt, əvvəl/sonra, vaxt.
-- **İki faktorlu autentifikasiya.** Ən azı admin və menecer rolları üçün (TOTP).
-- **`passlib` əvəzlənməsi.** `passlib` 1.7.4 artıq aktiv saxlanılmır və
-  `bcrypt==4.0.1`-ə bağlı qalmağımızın səbəbi budur (4.1+ ilə sınır).
-  Alternativ: birbaşa `bcrypt` kitabxanası və ya `argon2-cffi`.
-- **Asılılıq skanı CI-da.** `pip-audit` və ya Dependabot — `python-jose`
-  CVE-ləri auditə qədər gözlədi, halbuki avtomatik tutula bilərdi.
+- **Audit log.** Only `Reservation.created_by_id` is stored today. Who changed
+  a price, who cancelled a reservation, who issued a refund — none of it is
+  tracked. In a system that touches money, that log is the only argument
+  available when something is disputed. A separate `audit_log` table: actor,
+  action, object, before/after, timestamp.
+- **Two-factor authentication.** At least for the admin and manager roles
+  (TOTP).
+- **Replace `passlib`.** `passlib` 1.7.4 is no longer actively maintained, and
+  it is the reason `bcrypt` is pinned to 4.0.1 (it breaks with 4.1+).
+  Alternatives: the `bcrypt` library directly, or `argon2-cffi`.
+- **Dependency scanning in CI.** `pip-audit` or Dependabot — the `python-jose`
+  CVEs sat there until the audit, and could have been caught automatically.
