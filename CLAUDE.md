@@ -154,3 +154,17 @@ accepted.
   differ from the current one.
 - ~~`python-jose 3.3.0`~~ — CVE-2024-33663 and CVE-2024-33664; upgraded to
   3.4.0.
+
+### Audit follow-ups
+
+- ~~A guest name containing markup permanently broke their invoice~~ —
+  ReportLab parses `Paragraph` text as mini-XML, so a name like `<b>Ali` raised
+  a parse error and returned a 500 every time that invoice was requested. All
+  user-supplied text going into a `Paragraph` is escaped through `_esc()` in
+  `app/services/invoice_service.py`. Table cells take plain strings and are not
+  parsed, so they need no escaping.
+- ~~Searching for `%` returned every row~~ — `%` and `_` are LIKE wildcards and
+  the search term went into the pattern unescaped. `like_pattern()` in
+  `app/repositories/base.py` neutralises them, and both call sites pass
+  `escape=LIKE_ESCAPE`. This was never SQL injection — the queries are
+  parameterised — but on a large table it was a full scan.

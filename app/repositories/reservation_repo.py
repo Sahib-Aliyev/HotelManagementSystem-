@@ -10,7 +10,7 @@ from app.models.guest import Guest
 from app.models.payment import Payment, PaymentStatus
 from app.models.reservation import BLOCKING_STATUSES, Reservation, ReservationStatus
 from app.models.room import Room
-from app.repositories.base import BaseRepository
+from app.repositories.base import LIKE_ESCAPE, BaseRepository, like_pattern
 
 
 def _with_relations(stmt: Select) -> Select:
@@ -61,13 +61,13 @@ class ReservationRepository(BaseRepository[Reservation]):
 
         conditions = []
         if term:
-            pattern = f"%{term.strip().lower()}%"
+            pattern = like_pattern(term)
             conditions.append(
                 or_(
-                    func.lower(Reservation.reference).like(pattern),
-                    func.lower(Guest.full_name).like(pattern),
-                    func.lower(Guest.phone).like(pattern),
-                    func.lower(Room.room_number).like(pattern),
+                    func.lower(Reservation.reference).like(pattern, escape=LIKE_ESCAPE),
+                    func.lower(Guest.full_name).like(pattern, escape=LIKE_ESCAPE),
+                    func.lower(Guest.phone).like(pattern, escape=LIKE_ESCAPE),
+                    func.lower(Room.room_number).like(pattern, escape=LIKE_ESCAPE),
                 )
             )
         if status is not None:

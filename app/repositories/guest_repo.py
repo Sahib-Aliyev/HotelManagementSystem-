@@ -3,7 +3,7 @@
 from sqlalchemy import func, or_, select
 
 from app.models.guest import DocumentType, Guest
-from app.repositories.base import BaseRepository
+from app.repositories.base import LIKE_ESCAPE, BaseRepository, like_pattern
 
 
 class GuestRepository(BaseRepository[Guest]):
@@ -17,12 +17,12 @@ class GuestRepository(BaseRepository[Guest]):
         count_stmt = select(func.count()).select_from(Guest)
 
         if term:
-            pattern = f"%{term.strip().lower()}%"
+            pattern = like_pattern(term)
             condition = or_(
-                func.lower(Guest.full_name).like(pattern),
-                func.lower(Guest.phone).like(pattern),
-                func.lower(Guest.email).like(pattern),
-                func.lower(Guest.document_number).like(pattern),
+                func.lower(Guest.full_name).like(pattern, escape=LIKE_ESCAPE),
+                func.lower(Guest.phone).like(pattern, escape=LIKE_ESCAPE),
+                func.lower(Guest.email).like(pattern, escape=LIKE_ESCAPE),
+                func.lower(Guest.document_number).like(pattern, escape=LIKE_ESCAPE),
             )
             stmt = stmt.where(condition)
             count_stmt = count_stmt.where(condition)

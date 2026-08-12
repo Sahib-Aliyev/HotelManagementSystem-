@@ -9,6 +9,25 @@ from app.core.database import Base
 
 ModelT = TypeVar("ModelT", bound=Base)
 
+#: Passed to `.like(..., escape=LIKE_ESCAPE)` wherever `like_pattern` is used.
+LIKE_ESCAPE = "\\"
+
+
+def like_pattern(term: str) -> str:
+    """Build a contains-pattern with the caller's wildcards neutralised.
+
+    `%` and `_` are wildcards in SQL LIKE, so a staff member searching for a
+    literal "%" would otherwise match every row in the table.
+    """
+    escaped = (
+        term.strip()
+        .lower()
+        .replace(LIKE_ESCAPE, LIKE_ESCAPE * 2)  # first, or it double-escapes below
+        .replace("%", LIKE_ESCAPE + "%")
+        .replace("_", LIKE_ESCAPE + "_")
+    )
+    return f"%{escaped}%"
+
 
 class BaseRepository(Generic[ModelT]):
     model: type[ModelT]

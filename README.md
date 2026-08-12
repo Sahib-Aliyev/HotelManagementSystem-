@@ -113,7 +113,7 @@ app/
 └── main.py          app assembly, middleware, error handlers
 
 alembic/             migrations
-tests/               67 tests covering auth, security, booking rules, money, lifecycle
+tests/               74 tests covering auth, security, booking rules, money, lifecycle
 seed.py              demo hotel: 28 rooms, 15 guests, 175 reservations
 ```
 
@@ -173,7 +173,7 @@ Errors are uniform, so the frontend renders them without special cases:
 python -m pytest
 ```
 
-67 tests: authentication and role boundaries, every overlap shape, capacity and
+74 tests: authentication and role boundaries, every overlap shape, capacity and
 date validation, the full check-in → pay → check-out lifecycle, VAT and balance
 arithmetic, invoice idempotency, guest document rules. Each test runs against a
 fresh in-memory SQLite database.

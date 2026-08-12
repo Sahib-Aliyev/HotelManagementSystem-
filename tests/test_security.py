@@ -224,3 +224,60 @@ async def test_security_headers_are_present(client: AsyncClient):
 
 async def test_health_does_not_leak_the_environment(client: AsyncClient):
     assert (await client.get("/health")).json() == {"status": "ok"}
+
+
+# ----------------------------------------------------------- invoice rendering
+@pytest.mark.parametrize(
+    "hostile_name",
+    ["<b>Bold Guest", "Smith & Sons", "a < b", "</para>Broken"],
+    ids=["open-tag", "ampersand", "bare-lt", "closing-tag"],
+)
+async def test_invoice_pdf_survives_markup_in_a_guest_name(
+    reception_client, seeded, hostile_name
+):
+    """ReportLab parses Paragraph text as mini-XML.
+
+    An unescaped name used to raise a parse error, which made that guest's
+    invoice permanently un-generatable.
+    """
+    guest = await reception_client.post(
+        "/api/v1/guests",
+        json={
+            "full_name": hostile_name,
+            "phone": "+994500000123",
+            "document_number": f"HOSTILE{abs(hash(hostile_name)) % 10000}",
+        },
+    )
+    assert guest.status_code == 201
+
+    created = await reception_client.post(
+        "/api/v1/reservations",
+        json=booking(guest.json()["id"], seeded["rooms"][1].id),
+    )
+    assert created.status_code == 201
+
+    pdf = await reception_client.get(
+        f"/api/v1/invoices/reservation/{created.json()['id']}/pdf"
+    )
+    assert pdf.status_code == 200
+    assert pdf.content.startswith(b"%PDF")
+
+
+# ------------------------------------------------------------- search wildcards
+async def test_a_percent_search_does_not_match_every_guest(reception_client):
+    """`%` is a LIKE wildcard; unescaped it returned the whole table."""
+    everything = await reception_client.get("/api/v1/guests")
+    assert everything.json()["total"] > 0
+
+    wildcard = await reception_client.get("/api/v1/guests", params={"q": "%"})
+    assert wildcard.json()["total"] == 0
+
+
+async def test_an_underscore_search_does_not_match_every_guest(reception_client):
+    wildcard = await reception_client.get("/api/v1/guests", params={"q": "_"})
+    assert wildcard.json()["total"] == 0
+
+
+async def test_search_still_finds_a_real_guest(reception_client, seeded):
+    found = await reception_client.get("/api/v1/guests", params={"q": "Alice"})
+    assert found.json()["total"] == 1

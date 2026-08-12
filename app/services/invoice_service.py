@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -27,6 +28,17 @@ from app.services.payment_service import PaymentService
 
 CENTS = Decimal("0.01")
 BRAND = colors.HexColor("#1E3A8A")
+
+
+def _esc(value: object) -> str:
+    """Make a value safe to interpolate into a Paragraph.
+
+    Paragraph parses its text as mini-XML, so a guest named "<b>Ali" raised a
+    parse error and took the whole invoice down with a 500 — permanently, for
+    that guest. Table cells below take plain strings and are not parsed, so
+    only Paragraph content needs this.
+    """
+    return escape("" if value is None else str(value))
 ACCENT = colors.HexColor("#10B981")
 MUTED = colors.HexColor("#64748B")
 
@@ -100,7 +112,7 @@ class InvoiceService:
         value = ParagraphStyle("value", parent=styles["Normal"], fontSize=10)
 
         story = [
-            Paragraph(settings.APP_NAME, h1),
+            Paragraph(_esc(settings.APP_NAME), h1),
             Paragraph("Baku, Azerbaijan · +994 12 000 00 00 · stay@grandaurora.az", small),
             Spacer(1, 10 * mm),
         ]
@@ -113,9 +125,9 @@ class InvoiceService:
                     Paragraph("BOOKING REFERENCE", label),
                 ],
                 [
-                    Paragraph(invoice.invoice_number, value),
+                    Paragraph(_esc(invoice.invoice_number), value),
                     Paragraph(invoice.issued_at.strftime("%d %b %Y"), value),
-                    Paragraph(reservation.reference, value),
+                    Paragraph(_esc(reservation.reference), value),
                 ],
             ],
             colWidths=[57 * mm, 57 * mm, 56 * mm],
@@ -137,14 +149,14 @@ class InvoiceService:
                 [Paragraph("BILLED TO", label), Paragraph("STAY DETAILS", label)],
                 [
                     Paragraph(
-                        f"{reservation.guest.full_name}<br/>"
-                        f"{reservation.guest.phone}<br/>"
-                        f"{reservation.guest.email or ''}",
+                        f"{_esc(reservation.guest.full_name)}<br/>"
+                        f"{_esc(reservation.guest.phone)}<br/>"
+                        f"{_esc(reservation.guest.email)}",
                         value,
                     ),
                     Paragraph(
-                        f"Room {reservation.room.room_number} · "
-                        f"{reservation.room.room_type.name}<br/>"
+                        f"Room {_esc(reservation.room.room_number)} · "
+                        f"{_esc(reservation.room.room_type.name)}<br/>"
                         f"{reservation.check_in_date.strftime('%d %b %Y')} → "
                         f"{reservation.check_out_date.strftime('%d %b %Y')}<br/>"
                         f"{reservation.nights} night(s) · {reservation.guest_count} guest(s)",
