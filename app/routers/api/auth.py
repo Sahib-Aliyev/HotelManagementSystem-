@@ -1,9 +1,10 @@
 """Authentication and staff management endpoints."""
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Request, Response, status
 
 from app.core.config import settings
 from app.core.deps import AdminUser, CurrentUser, DbSession
+from app.core.ratelimit import limiter
 from app.schemas.auth import (
     LoginRequest,
     PasswordChange,
@@ -31,8 +32,15 @@ def set_session_cookie(response: Response, token: str) -> None:
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, response: Response, db: DbSession):
-    """Sign in. Also sets an httpOnly cookie so the web UI works from one call."""
+@limiter.limit(settings.LOGIN_RATE_LIMIT)
+async def login(
+    request: Request, payload: LoginRequest, response: Response, db: DbSession
+):
+    """Sign in. Also sets an httpOnly cookie so the web UI works from one call.
+
+    `request` is unused here but slowapi reads the client address off it, so
+    the limiter above only works while the parameter is present.
+    """
     _user, token = await AuthService(db).login(payload.email, payload.password)
     set_session_cookie(response, token.access_token)
     return token
@@ -50,11 +58,24 @@ async def me(user: CurrentUser):
 
 
 @router.post("/change-password", response_model=Message)
-async def change_password(payload: PasswordChange, user: CurrentUser, db: DbSession):
-    await AuthService(db).change_password(
-        user, payload.current_password, payload.new_password
-    )
-    return Message(message="Password updated.")
+@limiter.limit(settings.PASSWORD_CHANGE_RATE_LIMIT)
+async def change_password(
+    request: Request,
+    payload: PasswordChange,
+    response: Response,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Change the signed-in user's password and re-key this session.
+
+    The new hash invalidates every token issued under the old password, this
+    one included, so a replacement cookie is set before returning — other
+    devices stay signed out, which is the point.
+    """
+    service = AuthService(db)
+    await service.change_password(user, payload.current_password, payload.new_password)
+    set_session_cookie(response, service.issue_token(user).access_token)
+    return Message(message="Password updated. Other devices have been signed out.")
 
 
 # ------------------------------------------------------------- staff (admin)
@@ -73,9 +94,9 @@ async def create_staff(payload: UserCreate, db: DbSession, _admin: AdminUser):
 
 @staff_router.patch("/{user_id}", response_model=UserRead)
 async def update_staff(
-    user_id: int, payload: UserUpdate, db: DbSession, _admin: AdminUser
+    user_id: int, payload: UserUpdate, db: DbSession, admin: AdminUser
 ):
-    return await AuthService(db).update_user(user_id, payload)
+    return await AuthService(db).update_user(user_id, payload, admin)
 
 
 @staff_router.delete("/{user_id}", response_model=UserRead)

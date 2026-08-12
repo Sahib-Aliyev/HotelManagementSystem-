@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import AuthenticationError, PermissionDeniedError
-from app.core.security import decode_access_token
+from app.core.security import (
+    decode_access_token,
+    fingerprints_match,
+    password_fingerprint,
+)
 from app.models.user import User, UserRole
 from app.repositories.user_repo import UserRepository
 
@@ -42,6 +46,8 @@ async def get_current_user(request: Request, db: DbSession) -> User:
         raise AuthenticationError("Account no longer exists.")
     if not user.is_active:
         raise PermissionDeniedError("This account has been deactivated.")
+    if not fingerprints_match(payload.get("pwf"), password_fingerprint(user.hashed_password)):
+        raise AuthenticationError("Your password changed. Please sign in again.")
     return user
 
 

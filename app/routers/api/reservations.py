@@ -4,10 +4,9 @@ from datetime import date
 
 from fastapi import APIRouter, Query, status
 
-from app.core.deps import CurrentUser, DbSession, ManagerUser, StaffUser
+from app.core.deps import DbSession, ManagerUser, StaffUser
 from app.models.reservation import ReservationStatus
 from app.schemas.common import Page
-from app.schemas.guest import GuestCreate
 from app.schemas.reservation import (
     QuickBookingCreate,
     ReservationCancel,
@@ -63,7 +62,7 @@ async def search_reservations(
 
 @router.post("", response_model=ReservationRead, status_code=status.HTTP_201_CREATED)
 async def create_reservation(
-    payload: ReservationCreate, db: DbSession, user: CurrentUser
+    payload: ReservationCreate, db: DbSession, user: StaffUser
 ):
     return await ReservationService(db).create(payload, created_by=user)
 
@@ -72,10 +71,10 @@ async def create_reservation(
     "/walk-in", response_model=ReservationRead, status_code=status.HTTP_201_CREATED
 )
 async def create_walk_in(
-    payload: QuickBookingCreate, db: DbSession, user: CurrentUser
+    payload: QuickBookingCreate, db: DbSession, user: StaffUser
 ):
     """Register a new guest and book them in a single request."""
-    guest = await GuestService(db).get_or_create(GuestCreate(**payload.guest))
+    guest = await GuestService(db).get_or_create(payload.guest)
     return await ReservationService(db).create(
         ReservationCreate(
             guest_id=guest.id,
@@ -117,9 +116,11 @@ async def get_reservation(reservation_id: int, db: DbSession, _user: StaffUser):
 
 @router.patch("/{reservation_id}", response_model=ReservationRead)
 async def update_reservation(
-    reservation_id: int, payload: ReservationUpdate, db: DbSession, _user: StaffUser
+    reservation_id: int, payload: ReservationUpdate, db: DbSession, user: StaffUser
 ):
-    return await ReservationService(db).update(reservation_id, payload)
+    return await ReservationService(db).update(
+        reservation_id, payload, acting_user=user
+    )
 
 
 @router.post("/{reservation_id}/check-in", response_model=ReservationRead)

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.models.reservation import ReservationStatus
 from app.schemas.common import ORMModel
-from app.schemas.guest import GuestSummary
+from app.schemas.guest import GuestCreate, GuestSummary
 from app.schemas.room import RoomRead
 
 
@@ -81,7 +81,9 @@ class ReservationWithBalance(ReservationRead):
 class QuickBookingCreate(BaseModel):
     """Walk-in flow: create the guest and the reservation in one request."""
 
-    guest: dict
+    # Typed rather than a bare dict: an untyped payload skipped guest
+    # validation entirely and surfaced bad input as a 500 instead of a 422.
+    guest: GuestCreate
     room_id: int
     check_in_date: date
     check_out_date: date

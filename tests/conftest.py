@@ -3,17 +3,28 @@
 from collections.abc import AsyncGenerator
 from decimal import Decimal
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
+from app.core.ratelimit import limiter
 from app.core.security import hash_password
 from app.main import app
 from app.models import Guest, Room, RoomType, User, UserRole
 
 TEST_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_rate_limiter():
+    """The limiter's counters are process-wide, so one test's logins would
+    otherwise eat into the next test's budget."""
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest_asyncio.fixture
@@ -111,5 +122,14 @@ async def manager_client(client: AsyncClient) -> AsyncClient:
     await client.post(
         "/api/v1/auth/login",
         json={"email": "manager@test.az", "password": "Manager1234"},
+    )
+    return client
+
+
+@pytest_asyncio.fixture
+async def admin_client(client: AsyncClient) -> AsyncClient:
+    await client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@test.az", "password": "Admin1234"},
     )
     return client

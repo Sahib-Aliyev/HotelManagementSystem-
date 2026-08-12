@@ -3,7 +3,16 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Secrets that ship with the repository. Safe for local work, never for production.
+PUBLISHED_SECRET_KEYS = {
+    "change-me-in-production-please-use-a-long-random-string",
+    "compose-dev-secret-change-me-before-production",
+}
+
+MIN_SECRET_KEY_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -30,8 +39,15 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 12
     SESSION_COOKIE_NAME: str = "hotel_access_token"
 
-    # --- cors ---
+    # --- rate limiting ---
+    RATE_LIMIT_ENABLED: bool = True
+    LOGIN_RATE_LIMIT: str = "10/minute"
+    PASSWORD_CHANGE_RATE_LIMIT: str = "5/minute"
+
+    # --- cors / hosts ---
     CORS_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000"
+    #: Host header allow-list. Comma separated; "*" disables the check.
+    TRUSTED_HOSTS: str = "*"
 
     # --- business rules ---
     CURRENCY: str = "AZN"
@@ -45,8 +61,54 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     @property
+    def trusted_host_list(self) -> list[str]:
+        return [h.strip() for h in self.TRUSTED_HOSTS.split(",") if h.strip()]
+
+    @property
     def is_sqlite(self) -> bool:
         return self.DATABASE_URL.startswith("sqlite")
+
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV == "production"
+
+    @property
+    def docs_enabled(self) -> bool:
+        """The schema names every endpoint — not something to publish in production."""
+        return not self.is_production
+
+    @model_validator(mode="after")
+    def _refuse_unsafe_production(self) -> "Settings":
+        """Fail at boot rather than serve production traffic with dev defaults.
+
+        Each of these is silent in a running app — a placeholder signing key
+        forges sessions, `*` with credentialed CORS hands any origin the
+        cookie. Crashing on start is the only reliable way to surface them.
+        """
+        if not self.is_production:
+            return self
+
+        problems: list[str] = []
+        if self.SECRET_KEY in PUBLISHED_SECRET_KEYS:
+            problems.append(
+                "SECRET_KEY is still a value published in this repository — "
+                'generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+        elif len(self.SECRET_KEY) < MIN_SECRET_KEY_LENGTH:
+            problems.append(
+                f"SECRET_KEY must be at least {MIN_SECRET_KEY_LENGTH} characters"
+            )
+        if self.DEBUG:
+            problems.append("DEBUG must be false in production")
+        if "*" in self.cors_origin_list:
+            problems.append(
+                "CORS_ORIGINS cannot be '*' because the session cookie is credentialed"
+            )
+        if problems:
+            raise ValueError(
+                "Refusing to start with APP_ENV=production:\n  - " + "\n  - ".join(problems)
+            )
+        return self
 
 
 @lru_cache

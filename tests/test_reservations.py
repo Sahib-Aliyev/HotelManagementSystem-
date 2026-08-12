@@ -90,9 +90,13 @@ async def test_walk_in_registers_guest_and_books_in_one_call(reception_client, s
     assert body["guest"]["full_name"] == "Walk-in Wendy"
 
 
-async def test_walk_in_honours_a_nightly_rate_override(reception_client, seeded):
-    """Regression test: the override used to be silently dropped for new guests."""
-    response = await reception_client.post(
+async def test_walk_in_honours_a_nightly_rate_override(manager_client, seeded):
+    """Regression test: the override used to be silently dropped for new guests.
+
+    Driven by a manager because overriding the rate is now a manager-only
+    action; the receptionist half of that rule lives in test_security.py.
+    """
+    response = await manager_client.post(
         "/api/v1/reservations/walk-in",
         json={
             "room_id": seeded["rooms"][1].id,  # base rate 150.00/night

@@ -11,10 +11,15 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import utcnow
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from app.models.reservation import Reservation, ReservationStatus
 from app.models.room import RoomStatus
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.repositories.guest_repo import GuestRepository
 from app.repositories.reservation_repo import ReservationRepository
 from app.repositories.room_repo import RoomRepository
@@ -44,6 +49,26 @@ class ReservationService:
     @staticmethod
     def _price(nightly_rate: Decimal, nights: int) -> Decimal:
         return (Decimal(nightly_rate) * nights).quantize(Decimal("0.01"))
+
+    @staticmethod
+    def _assert_may_set_rate(
+        nightly_rate: Decimal | None, acting_user: User | None
+    ) -> None:
+        """Discounting is a manager decision, so it is enforced here.
+
+        The booking form only shows the rate field to managers, but the field
+        is just JSON on the way to the API — a receptionist can post any price
+        they like unless the server says no. This is that check.
+        """
+        if nightly_rate is None:
+            return
+        if acting_user is None or acting_user.role not in (
+            UserRole.ADMIN,
+            UserRole.MANAGER,
+        ):
+            raise PermissionDeniedError(
+                "Only a manager or administrator can override the nightly rate."
+            )
 
     async def _assert_room_free(
         self,
@@ -95,6 +120,8 @@ class ReservationService:
     async def create(
         self, payload: ReservationCreate, *, created_by: User | None = None
     ) -> Reservation:
+        self._assert_may_set_rate(payload.nightly_rate, created_by)
+
         guest = await self.guests.get(payload.guest_id)
         if guest is None:
             raise NotFoundError("Guest not found.")
@@ -139,8 +166,14 @@ class ReservationService:
 
     # ---------------------------------------------------------- modification
     async def update(
-        self, reservation_id: int, payload: ReservationUpdate
+        self,
+        reservation_id: int,
+        payload: ReservationUpdate,
+        *,
+        acting_user: User | None = None,
     ) -> Reservation:
+        self._assert_may_set_rate(payload.nightly_rate, acting_user)
+
         reservation = await self.get(reservation_id)
         if reservation.status not in EDITABLE_STATUSES:
             raise ConflictError(
