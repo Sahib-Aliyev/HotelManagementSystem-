@@ -135,6 +135,11 @@ long utility strings. Reuse it rather than hand-rolling a new card or button.
   rendered. Fine for a drawer the user is looking at; not fine for a menu whose
   hidden state has to be reliable, which is why the room-card menu has no
   transition.
+- **"Sleeps N" is a room, "N guest(s)" is a booking.** Capacity belongs to the
+  room type and never changes; the party size belongs to the stay. Printing one
+  in the other's words puts two different numbers for the same room on two
+  screens — see "Fixed bugs". `settings.html` and `new_reservation.html` already
+  used "Sleeps"/"sleeps"; keep to it.
 - **The sidebar is `lg:sticky lg:top-0 lg:h-screen`, not `lg:static`.** As a
   static flex child it stretched to the height of the page, so scrolling a long
   list carried the whole navigation off screen and left an empty column behind.
@@ -400,6 +405,16 @@ from `BUGS-TODO.md`. Regression tests: `tests/test_reservations.py`,
   and Escape / outside click / a second click all dismiss it. The full round
   trip runs in the app: Available → Flag for cleaning → Cleaning → Mark clean →
   Available.
+- ~~A room card and the front desk disagreed about how many guests were in a
+  room~~ — the front desk showed room 306 as "Family Room · 1 guest(s)" while
+  the rooms board showed the same room as "4 guest(s)". Neither number was
+  wrong: the front desk prints the party on the booking (`adults + children`)
+  and the card was printing the room type's capacity, both with the word
+  "guest(s)". The card says `Sleeps 4` now — the wording `settings.html` and the
+  booking form already used — and the occupant block carries the number a
+  receptionist actually wants, the party in the room, with the booking reference
+  moved onto its own line. No data was involved; nothing about occupancy,
+  pricing or availability changed.
 - ~~Marking an occupied room clean put it back on the sale floor~~ — room
   status and reservation status answer different questions, and nothing tied
   them together. Flagging an in-house room for cleaning and then pressing "Mark
