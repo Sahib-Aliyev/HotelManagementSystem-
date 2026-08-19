@@ -221,6 +221,70 @@ function confirmMixin() {
   };
 }
 
+/* ------------------------------------------------- card action menu (rooms)
+ * A popover inside a grid card has nowhere to go: the menu is 176px wide and a
+ * card is ~155px at the two-column breakpoint, so anchored inside the card it
+ * overflows the grid and is clipped by whichever ancestor scrolls. This keeps
+ * the menu in the card's Alpine scope but teleports the element to <body> and
+ * positions it with fixed coordinates measured off the button, clamped to the
+ * viewport — so no ancestor can clip it and it never opens off screen.
+ */
+function cardMenu() {
+  return {
+    open: false,
+
+    toggle() {
+      if (this.open) {
+        this.open = false;
+        return;
+      }
+      // Shown first, positioned on the next tick: a hidden element measures
+      // 0x0, and the menu has to be placed against its real height.
+      this.open = true;
+      this.$nextTick(() => this.place());
+    },
+
+    // Scrolling moves the card but not a fixed-position menu, so the menu
+    // follows its button — and gives up once the button has left the screen,
+    // rather than floating over unrelated content.
+    follow() {
+      if (!this.open) return;
+      const anchor = this.$refs.anchor.getBoundingClientRect();
+      if (anchor.bottom <= 0 || anchor.top >= window.innerHeight) {
+        this.open = false;
+        return;
+      }
+      this.place();
+    },
+
+    place() {
+      // Written straight onto the element rather than through a `:style`
+      // binding. A style binding rewrites the whole inline style attribute and
+      // wipes the `display: none` that x-show puts there, which left every
+      // menu on the page permanently rendered — an invisible box parked at
+      // whatever coordinates it was last given.
+      const menu = this.$refs.menu;
+      const anchor = this.$refs.anchor.getBoundingClientRect();
+      const width = menu.offsetWidth;
+      const height = menu.offsetHeight;
+      const gap = 6;
+      const edge = 8;
+
+      const left = Math.min(
+        Math.max(edge, anchor.right - width),
+        window.innerWidth - width - edge,
+      );
+      // Above the button by default — it sits on the card's bottom edge. Below
+      // only when there is no room above, and never past the viewport.
+      let top = anchor.top - height - gap;
+      if (top < edge) top = Math.min(anchor.bottom + gap, window.innerHeight - height - edge);
+
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.top = `${Math.round(top)}px`;
+    },
+  };
+}
+
 /* ------------------------------------------------------------------ invoices
  * The PDF route is read-only: it renders an invoice that has been issued and
  * 404s otherwise, so that a GET (which a mailed link can trigger, cookie and
@@ -281,4 +345,5 @@ window.dotClass = dotClass;
 window.shell = shell;
 window.confirmMixin = confirmMixin;
 window.openInvoicePdf = openInvoicePdf;
+window.cardMenu = cardMenu;
 window.chartTheme = chartTheme;

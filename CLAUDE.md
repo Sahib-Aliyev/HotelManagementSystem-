@@ -101,13 +101,34 @@ long utility strings. Reuse it rather than hand-rolling a new card or button.
 - `/static` is cache-busted with `?v={{ asset_version }}`, derived from the
   mtimes of `app.css` and `app.js` in `app/routers/web.py`. Any new static
   asset referenced from a template should carry the same query.
-- **Do not put an absolutely-positioned popover inside a grid card.** The
-  cards in `rooms.html` are ~155px wide at the two-column breakpoint, so a
-  `w-44` dropdown cannot fit in either direction: it overflows the grid and is
-  clipped by whichever ancestor scrolls. Card-level actions are inline buttons
-  — icon-only ones carry `title` and `aria-label`, and the row uses
-  `flex-wrap` so a narrow card pushes them onto a second line. Popovers are
-  fine in the top bar, where the viewport edge is the only boundary.
+- **A popover inside a grid card has to leave the card.** The cards in
+  `rooms.html` are ~155px wide at the two-column breakpoint and the menu is
+  `w-44` (176px), so anchored inside the card it overflows the grid in every
+  direction and is clipped by whichever ancestor scrolls. `cardMenu()` in
+  `app.js` is the pattern: `<template x-teleport="body">` keeps the card's
+  Alpine scope but moves the element out, and the menu is positioned with
+  fixed coordinates measured off its button and clamped to the viewport. It
+  follows the button while the page scrolls and closes once the button leaves
+  the screen. Popovers anchored in the top bar need none of this — there the
+  viewport edge is the only boundary.
+- **Never drive a popover's position with `:style` while `x-show` controls it.**
+  A style binding rewrites the whole inline `style` attribute, which wipes the
+  `display: none` that `x-show` wrote — every menu on the page then stays
+  rendered, invisible but real, parked at whatever coordinates it last had.
+  Write positions imperatively (`el.style.left = …`), and leave `display` to
+  `x-show`.
+- **Listeners bound to a teleported element do not fire**, `.window`
+  modifiers included. Put the close handlers (`@click.outside`,
+  `@keydown.escape.window`, `@scroll.window`, `@resize.window`) on the wrapper
+  that stays in the tree, which shares the same Alpine scope.
+- **`x-transition` hands `display` to a completion callback.** In a background
+  tab that callback never runs, so a transitioned `x-show` element can stay
+  rendered. Fine for a drawer the user is looking at; not fine for a menu whose
+  hidden state has to be reliable, which is why the room-card menu has no
+  transition.
+- **The sidebar is `lg:sticky lg:top-0 lg:h-screen`, not `lg:static`.** As a
+  static flex child it stretched to the height of the page, so scrolling a long
+  list carried the whole navigation off screen and left an empty column behind.
 - **A `<template x-if>` inside an `<svg>` silently breaks Alpine** — SVG is
   foreign content, so the element has no `.content` and Alpine throws on
   `cloneNode`. Bind the shape instead (`<path :d="…">`), as the toast host does.
@@ -344,21 +365,40 @@ from `BUGS-TODO.md`. Regression tests: `tests/test_reservations.py`,
   all label how many days overdue something is
   (`fmt.overdueLabel`). Overdue arrivals get a manager-only "No show" button so
   they can be resolved rather than left holding inventory.
-- ~~The housekeeping menu on a room card was clipped and unclickable~~ — the
-  card carried `overflow-hidden` (to clip the status stripe to its rounded
-  corners) and the `⋮` menu opened downward past the card's bottom edge, so
-  "Flag for cleaning" and "Take out of service" had never been reachable from
-  the UI. Removing the clip and opening the menu upward was not enough: the
-  menu is `w-44` (176px) and a card is about 155px wide in the two-column
-  layout, so it still overflowed the grid sideways and was clipped by the next
-  ancestor that scrolled — it rendered as a blank white sliver half off-screen.
-  The popover is gone. The three actions are inline icon buttons in the card's
-  button row (`title` + `aria-label` on each, `flex-wrap` so they drop to a
-  second line instead of overflowing), which cannot be clipped by anything.
-  Verified by hit-testing every control on the first and last card at 375,
-  768 and 1280px: each one is inside its card and
-  `document.elementFromPoint()` returns it. The stripe keeps its own
-  `rounded-t-2xl`, so the card no longer needs to clip its children.
+- ~~The housekeeping menu on a room card was clipped and unclickable~~ — three
+  passes, because each one uncovered the next problem. (1) The card carried
+  `overflow-hidden` to clip the status stripe to its rounded corners and the
+  `⋮` menu opened downward past the card's bottom edge, so "Flag for cleaning"
+  and "Take out of service" had never once been reachable from the UI. (2) With
+  the clip removed and the menu opening upward it still did not fit: `w-44` is
+  176px against a card of about 155px, so it overflowed the grid sideways and
+  was clipped by the next ancestor that scrolled. Inline icon buttons fixed
+  that but made a small card busy, with the actions wrapping onto a second row.
+  (3) The menu is back behind the `⋮`, teleported to `<body>` and positioned
+  against its button — `cardMenu()` in `app.js`, see the frontend rules above.
+  Along the way the `:style` binding used for those coordinates turned out to
+  be wiping `x-show`'s `display: none`, which left all 28 menus permanently
+  rendered as invisible boxes at stale coordinates: that is the blank white
+  panel that showed up in a screenshot. Positions are written imperatively now.
+  Verified at 375, 768 and 1280px, on the first and last card in the grid:
+  nothing is rendered while closed, the menu opens inside the viewport aligned
+  to its button, every item is returned by `document.elementFromPoint()`, it
+  follows the button on scroll and closes when the button leaves the screen,
+  and Escape / outside click / a second click all dismiss it. The full round
+  trip runs in the app: Available → Flag for cleaning → Cleaning → Mark clean →
+  Available.
+- ~~The sidebar scrolled away and left an empty column~~ — the `<aside>` was
+  `lg:static` inside a flex row, so it stretched to the height of the page
+  (2023px against an 800px viewport). Scrolling the 28-card rooms grid put
+  every one of the seven nav links off screen, leaving a blank white strip
+  where the navigation should be. It is `lg:sticky lg:top-0 lg:h-screen` now,
+  with its own overflow, so the navigation stays where it is at any scroll
+  position.
+- ~~Room cards were cramped at desktop widths~~ — the grid went to five columns
+  at `xl` (1280px), which left each card 184px wide: the room type name
+  truncated to "Standard …" and the price wrapped onto its own line. Five
+  columns start at `2xl` now, so a 1280px screen gets 233px cards and neither
+  wraps.
 
 ### Audit follow-ups
 
