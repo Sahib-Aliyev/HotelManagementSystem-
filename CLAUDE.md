@@ -101,6 +101,13 @@ long utility strings. Reuse it rather than hand-rolling a new card or button.
 - `/static` is cache-busted with `?v={{ asset_version }}`, derived from the
   mtimes of `app.css` and `app.js` in `app/routers/web.py`. Any new static
   asset referenced from a template should carry the same query.
+- **Do not put an absolutely-positioned popover inside a grid card.** The
+  cards in `rooms.html` are ~155px wide at the two-column breakpoint, so a
+  `w-44` dropdown cannot fit in either direction: it overflows the grid and is
+  clipped by whichever ancestor scrolls. Card-level actions are inline buttons
+  — icon-only ones carry `title` and `aria-label`, and the row uses
+  `flex-wrap` so a narrow card pushes them onto a second line. Popovers are
+  fine in the top bar, where the viewport edge is the only boundary.
 - **A `<template x-if>` inside an `<svg>` silently breaks Alpine** — SVG is
   foreign content, so the element has no `.content` and Alpine throws on
   `cloneNode`. Bind the shape instead (`<path :d="…">`), as the toast host does.
@@ -339,11 +346,19 @@ from `BUGS-TODO.md`. Regression tests: `tests/test_reservations.py`,
   they can be resolved rather than left holding inventory.
 - ~~The housekeeping menu on a room card was clipped and unclickable~~ — the
   card carried `overflow-hidden` (to clip the status stripe to its rounded
-  corners) and the menu opened downward past the card's bottom edge, so "Flag
-  for cleaning" and "Take out of service" had never been reachable from the UI.
-  The stripe rounds its own corners (`rounded-t-2xl`), the card no longer
-  clips, and the menu opens upward — a card in the last grid row would
-  otherwise be cut off by the viewport instead.
+  corners) and the `⋮` menu opened downward past the card's bottom edge, so
+  "Flag for cleaning" and "Take out of service" had never been reachable from
+  the UI. Removing the clip and opening the menu upward was not enough: the
+  menu is `w-44` (176px) and a card is about 155px wide in the two-column
+  layout, so it still overflowed the grid sideways and was clipped by the next
+  ancestor that scrolled — it rendered as a blank white sliver half off-screen.
+  The popover is gone. The three actions are inline icon buttons in the card's
+  button row (`title` + `aria-label` on each, `flex-wrap` so they drop to a
+  second line instead of overflowing), which cannot be clipped by anything.
+  Verified by hit-testing every control on the first and last card at 375,
+  768 and 1280px: each one is inside its card and
+  `document.elementFromPoint()` returns it. The stripe keeps its own
+  `rounded-t-2xl`, so the card no longer needs to clip its children.
 
 ### Audit follow-ups
 

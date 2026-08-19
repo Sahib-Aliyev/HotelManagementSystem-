@@ -15,15 +15,18 @@ once it is closed.
 
 ---
 
-## Waiting on a human check
+## Closed since, for the record
 
-- [ ] **The room-card `⋮` menu at three widths.** The clipping fix is verified
-      in the running app for the three things it depends on: the card computes
-      `overflow: visible`, the status stripe carries its own 16px top radius,
-      and the menu opens upward (`bottom-full`). What is *not* verified is the
-      hit test that originally proved the bug —
-      `document.elementFromPoint()` over each item — because the preview
-      browser used to check it reports a 0×0 viewport, so no geometry it
-      returns means anything. Open `/rooms`, click `⋮` on a card in the **last**
-      grid row, and confirm all three items are visible and clickable at
-      desktop, tablet and mobile widths.
+The room-card `⋮` menu needed a second pass. Removing the card's
+`overflow-hidden` and opening the menu upward stopped it being clipped
+*vertically*, but the menu is 176px wide and a card is about 155px wide in the
+two-column layout, so it still overflowed the grid sideways — on a narrow
+window it rendered as a blank white sliver half outside the visible area.
+
+There is no position that fits, so the popover was removed. The three actions
+are inline icon buttons in the card's button row. Hit-tested at 375, 768 and
+1280px, on the first and the last card in the grid: every control sits inside
+its card and `document.elementFromPoint()` at its centre returns the control
+itself. The round trip was exercised in the running app too — Available → Flag
+for cleaning → Cleaning → Mark clean → Available — and "Take out of service"
+still goes through the confirmation dialog.

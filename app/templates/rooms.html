@@ -94,9 +94,10 @@
   <div x-show="!loading && visible.length" style="display:none"
        class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
     <template x-for="entry in visible" :key="entry.room.id">
-      {# No overflow-hidden: it clipped the ⋮ menu below, which opens past the
-         card's bottom edge and was unclickable in every direction. The status
-         stripe rounds its own top corners instead. #}
+      {# No overflow-hidden here: it used to clip the housekeeping popover that
+         opened past the card's bottom edge. The popover is gone (see the button
+         row below), but the stripe still rounds its own top corners, so the
+         card has no reason to clip its children. #}
       <article class="card room-card relative hover:shadow-lift">
         <span class="absolute inset-x-0 top-0 h-1 rounded-t-2xl"
               :style="`background:${statusColor(entry.room.status)}`"></span>
@@ -145,38 +146,41 @@
             </template>
           </div>
 
-          <div class="mt-3 flex gap-1.5">
+          {# The housekeeping actions are inline, not behind a ⋮ popover.
+             A 176px-wide dropdown cannot fit next to a card that is ~155px
+             wide in the two-column layout, so it overflowed the grid and was
+             clipped by whichever ancestor happened to scroll — first the card
+             itself, then the page. Buttons in the flow cannot be clipped, and
+             these two are the primary housekeeping actions anyway. #}
+          <div class="mt-3 flex flex-wrap items-center gap-1.5">
             <button x-show="entry.room.status === 'cleaning'" @click="setStatus(entry, 'available')"
-                    class="btn btn-accent btn-xs flex-1">Mark clean</button>
+                    class="btn btn-accent btn-xs min-w-[84px] flex-1">Mark clean</button>
             <button x-show="entry.room.status === 'available' && !entry.occupant" @click="book(entry)"
-                    class="btn btn-primary btn-xs flex-1">Book</button>
+                    class="btn btn-primary btn-xs min-w-[84px] flex-1">Book</button>
             <button x-show="entry.room.status === 'maintenance'" @click="setStatus(entry, 'available')"
-                    class="btn btn-primary btn-xs flex-1">Return to service</button>
+                    class="btn btn-primary btn-xs min-w-[84px] flex-1">Return to service</button>
 
-            <div x-data="{ open: false }" class="relative">
-              <button @click="open = !open" @click.outside="open = false"
-                      aria-label="More actions" :aria-expanded="open"
-                      class="btn btn-outline btn-xs px-1.5">
-                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                  <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-                </svg>
-              </button>
-              {# Opens upward: the button sits on the card's bottom edge, so
-                 downward it would fall off the viewport for the last row. #}
-              <div x-show="open" x-transition style="display:none"
-                   class="absolute bottom-full right-0 z-20 mb-1 w-44 overflow-hidden rounded-xl border border-slate-200
-                          bg-white shadow-pop dark:border-slate-700 dark:bg-slate-800">
-                <button @click="setStatus(entry, 'cleaning'); open = false"
-                        class="block w-full px-3 py-2 text-left text-xs text-slate-600 transition hover:bg-slate-50
-                               dark:text-slate-300 dark:hover:bg-slate-700">Flag for cleaning</button>
-                <button @click="setStatus(entry, 'maintenance'); open = false"
-                        class="block w-full px-3 py-2 text-left text-xs text-slate-600 transition hover:bg-slate-50
-                               dark:text-slate-300 dark:hover:bg-slate-700">Take out of service</button>
-                <a :href="`/reservations?q=${entry.room.room_number}`"
-                   class="block w-full px-3 py-2 text-left text-xs text-slate-600 transition hover:bg-slate-50
-                          dark:text-slate-300 dark:hover:bg-slate-700">View bookings</a>
-              </div>
-            </div>
+            <button x-show="entry.room.status !== 'cleaning'" @click="setStatus(entry, 'cleaning')"
+                    aria-label="Flag for cleaning" title="Flag for cleaning"
+                    class="btn btn-outline btn-xs px-1.5">
+              <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path d="M11 3l1.4 3.6L16 8l-3.6 1.4L11 13 9.6 9.4 6 8l3.6-1.4zM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z"/>
+              </svg>
+            </button>
+            <button x-show="entry.room.status !== 'maintenance'" @click="setStatus(entry, 'maintenance')"
+                    aria-label="Take out of service" title="Take out of service"
+                    class="btn btn-outline btn-xs px-1.5">
+              <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>
+              </svg>
+            </button>
+            <a :href="`/reservations?q=${entry.room.room_number}`"
+               aria-label="View bookings for this room" title="View bookings"
+               class="btn btn-outline btn-xs px-1.5">
+              <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path d="M8 3v4m8-4v4M3 9h18M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"/>
+              </svg>
+            </a>
           </div>
         </div>
       </article>
