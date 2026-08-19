@@ -41,7 +41,9 @@ async def search_reservations(
     guest_id: int | None = None,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    order: str = Query("desc", pattern="^(asc|desc)$", description="Sort by check-in date"),
+    order: str = Query(
+        "desc", pattern="^(asc|desc)$", description="Sort by check-in date"
+    ),
 ):
     rows, total = await ReservationService(db).search(
         term=q,
@@ -62,18 +64,14 @@ async def search_reservations(
 
 
 @router.post("", response_model=ReservationRead, status_code=status.HTTP_201_CREATED)
-async def create_reservation(
-    payload: ReservationCreate, db: DbSession, user: StaffUser
-):
+async def create_reservation(payload: ReservationCreate, db: DbSession, user: StaffUser):
     return await ReservationService(db).create(payload, created_by=user)
 
 
 @router.post(
     "/walk-in", response_model=ReservationRead, status_code=status.HTTP_201_CREATED
 )
-async def create_walk_in(
-    payload: QuickBookingCreate, db: DbSession, user: StaffUser
-):
+async def create_walk_in(payload: QuickBookingCreate, db: DbSession, user: StaffUser):
     """Register a new guest and book them in a single request."""
     guest = await GuestService(db).get_or_create(payload.guest)
     return await ReservationService(db).create(
@@ -119,9 +117,7 @@ async def get_reservation(reservation_id: int, db: DbSession, _user: StaffUser):
 async def update_reservation(
     reservation_id: int, payload: ReservationUpdate, db: DbSession, user: StaffUser
 ):
-    return await ReservationService(db).update(
-        reservation_id, payload, acting_user=user
-    )
+    return await ReservationService(db).update(reservation_id, payload, acting_user=user)
 
 
 @router.post("/{reservation_id}/check-in", response_model=ReservationRead)

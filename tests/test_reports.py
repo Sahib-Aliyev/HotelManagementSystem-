@@ -66,9 +66,9 @@ async def test_the_report_breakdown_adds_up_to_its_headline(manager_client, seed
 
     report = (await manager_client.get("/api/v1/reports/summary")).json()
     by_type = sum(Decimal(row["revenue"]) for row in report["room_type_performance"])
-    assert Decimal(report["total_revenue"]) == by_type, (
-        "the room-type table is the headline figure, broken down"
-    )
+    assert (
+        Decimal(report["total_revenue"]) == by_type
+    ), "the room-type table is the headline figure, broken down"
 
 
 async def test_revenue_and_cash_are_separate_and_named(manager_client, seeded):
@@ -124,9 +124,9 @@ async def test_adr_is_room_revenue_over_nights_sold(manager_client, seeded):
             "/api/v1/reports/summary", params={"start": iso(0), "end": iso(0)}
         )
     ).json()
-    assert Decimal(report["average_daily_rate"]) == Decimal(stay["nightly_rate"]), (
-        "ADR is the rate the room actually sold at, whatever was paid when"
-    )
+    assert Decimal(report["average_daily_rate"]) == Decimal(
+        stay["nightly_rate"]
+    ), "ADR is the rate the room actually sold at, whatever was paid when"
 
 
 async def test_an_unpaid_stay_still_earns_revenue(manager_client, seeded):
@@ -144,9 +144,7 @@ async def test_an_unpaid_stay_still_earns_revenue(manager_client, seeded):
 
 
 # -------------------------------------------------------- outstanding balance
-async def test_a_written_off_balance_stops_being_reported_as_owed(
-    manager_client, seeded
-):
+async def test_a_written_off_balance_stops_being_reported_as_owed(manager_client, seeded):
     stay = await _stay(
         manager_client, guest_id=seeded["guests"][0].id, room_id=seeded["rooms"][1].id
     )
@@ -207,9 +205,9 @@ async def test_one_overpaid_stay_cannot_mask_another_stays_debt(
 
     stats = (await manager_client.get("/api/v1/reports/dashboard")).json()["stats"]
     owed_on_first = (Decimal(owing["total_price"]) * (1 + VAT)).quantize(Decimal("0.01"))
-    assert Decimal(stats["outstanding_balance"]) == owed_on_first, (
-        "the credit on one stay must not net off the debt on another"
-    )
+    assert (
+        Decimal(stats["outstanding_balance"]) == owed_on_first
+    ), "the credit on one stay must not net off the debt on another"
 
 
 # ------------------------------------------------------------- query volume
@@ -241,15 +239,13 @@ async def test_the_trends_do_not_query_once_per_day(manager_client, seeded, engi
 
     assert short.status_code == 200 and long.status_code == 200
     assert len(long.json()) == 90, "still one point per day"
-    assert for_90_days == for_14_days, (
-        f"the query count follows the window: {for_14_days} vs {for_90_days}"
-    )
+    assert (
+        for_90_days == for_14_days
+    ), f"the query count follows the window: {for_14_days} vs {for_90_days}"
     assert for_90_days < 10, f"{for_90_days} statements for one chart"
 
 
-async def test_the_management_report_query_count_is_flat(
-    manager_client, seeded, engine
-):
+async def test_the_management_report_query_count_is_flat(manager_client, seeded, engine):
     counter = {"n": 0}
 
     @event.listens_for(engine.sync_engine, "before_cursor_execute")

@@ -56,16 +56,22 @@ async def db(session_factory) -> AsyncGenerator[AsyncSession, None]:
 async def seeded(db: AsyncSession) -> dict:
     """A minimal hotel: three staff roles, two room types, three rooms, two guests."""
     admin = User(
-        full_name="Test Admin", email="admin@test.az",
-        hashed_password=hash_password("Admin1234"), role=UserRole.ADMIN,
+        full_name="Test Admin",
+        email="admin@test.az",
+        hashed_password=hash_password("Admin1234"),
+        role=UserRole.ADMIN,
     )
     manager = User(
-        full_name="Test Manager", email="manager@test.az",
-        hashed_password=hash_password("Manager1234"), role=UserRole.MANAGER,
+        full_name="Test Manager",
+        email="manager@test.az",
+        hashed_password=hash_password("Manager1234"),
+        role=UserRole.MANAGER,
     )
     reception = User(
-        full_name="Test Reception", email="reception@test.az",
-        hashed_password=hash_password("Reception1234"), role=UserRole.RECEPTIONIST,
+        full_name="Test Reception",
+        email="reception@test.az",
+        hashed_password=hash_password("Reception1234"),
+        role=UserRole.RECEPTIONIST,
     )
     db.add_all([admin, manager, reception])
 
@@ -84,16 +90,22 @@ async def seeded(db: AsyncSession) -> dict:
         Room(room_number="103", room_type_id=double.id, floor=1),
     ]
     guests = [
-        Guest(full_name="Alice Tester", phone="+994500000001", document_number="P1000001"),
+        Guest(
+            full_name="Alice Tester", phone="+994500000001", document_number="P1000001"
+        ),
         Guest(full_name="Bob Tester", phone="+994500000002", document_number="P1000002"),
     ]
     db.add_all(rooms + guests)
     await db.commit()
 
     return {
-        "admin": admin, "manager": manager, "reception": reception,
-        "single": single, "double": double,
-        "rooms": rooms, "guests": guests,
+        "admin": admin,
+        "manager": manager,
+        "reception": reception,
+        "single": single,
+        "double": double,
+        "rooms": rooms,
+        "guests": guests,
     }
 
 

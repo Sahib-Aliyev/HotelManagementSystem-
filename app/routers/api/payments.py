@@ -23,9 +23,7 @@ async def record_payment(payload: PaymentCreate, db: DbSession, user: StaffUser)
 
 
 @router.get("/reservation/{reservation_id}", response_model=list[PaymentRead])
-async def payments_for_reservation(
-    reservation_id: int, db: DbSession, _user: StaffUser
-):
+async def payments_for_reservation(reservation_id: int, db: DbSession, _user: StaffUser):
     return await PaymentService(db).list_for_reservation(reservation_id)
 
 

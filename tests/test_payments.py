@@ -91,9 +91,9 @@ async def test_checkout_is_blocked_until_vat_is_paid(reception_client, seeded):
     blocked = await reception_client.post(
         f"/api/v1/reservations/{reservation['id']}/check-out"
     )
-    assert blocked.status_code == 409, (
-        "check-out must not succeed while VAT is still outstanding"
-    )
+    assert (
+        blocked.status_code == 409
+    ), "check-out must not succeed while VAT is still outstanding"
 
     tax = (subtotal * Decimal("0.18")).quantize(Decimal("0.01"))
     paid_tax = await reception_client.post(
@@ -104,9 +104,9 @@ async def test_checkout_is_blocked_until_vat_is_paid(reception_client, seeded):
             "method": "cash",
         },
     )
-    assert paid_tax.status_code == 201, (
-        "a payment for exactly the outstanding VAT must be accepted"
-    )
+    assert (
+        paid_tax.status_code == 201
+    ), "a payment for exactly the outstanding VAT must be accepted"
 
     allowed = await reception_client.post(
         f"/api/v1/reservations/{reservation['id']}/check-out"
@@ -264,9 +264,7 @@ async def test_a_receipt_number_cannot_be_recorded_twice(manager_client, seeded)
     assert other.status_code == 201
 
 
-async def test_a_payment_without_a_reference_is_not_deduplicated(
-    manager_client, seeded
-):
+async def test_a_payment_without_a_reference_is_not_deduplicated(manager_client, seeded):
     """Only a receipt number identifies a movement of money. Two cash payments
     of the same amount with no reference are a normal thing to record."""
     stay = await _book_and_check_in(
@@ -330,9 +328,9 @@ async def test_invoice_numbers_are_never_handed_out_twice(manager_client, seeded
     )
     third = await manager_client.post(f"/api/v1/invoices/reservation/{stay['id']}")
     assert third.status_code == 201
-    assert third.json()["invoice_number"].endswith("-00003"), (
-        "a deleted invoice must not free its number for reuse"
-    )
+    assert third.json()["invoice_number"].endswith(
+        "-00003"
+    ), "a deleted invoice must not free its number for reuse"
     assert third.json()["invoice_number"] not in [n["invoice_number"] for n in numbers]
 
 

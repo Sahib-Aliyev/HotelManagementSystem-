@@ -1,7 +1,7 @@
 """Populate the database with a realistic demo hotel.
 
-    python seed.py           # create tables and seed if empty
-    python seed.py --reset   # drop everything first
+python seed.py           # create tables and seed if empty
+python seed.py --reset   # drop everything first
 """
 
 import asyncio
@@ -33,23 +33,79 @@ from app.models import (
 RNG = random.Random(20260811)
 
 STAFF = [
-    ("Aysel Mammadova", "admin@grandaurora.az", "Admin1234", UserRole.ADMIN, "+994 50 111 11 11"),
-    ("Rashad Aliyev", "manager@grandaurora.az", "Manager1234", UserRole.MANAGER, "+994 50 222 22 22"),
-    ("Nigar Huseynova", "reception@grandaurora.az", "Reception1234", UserRole.RECEPTIONIST, "+994 50 333 33 33"),
-    ("Elvin Qasimov", "elvin@grandaurora.az", "Reception1234", UserRole.RECEPTIONIST, "+994 50 444 44 44"),
+    (
+        "Aysel Mammadova",
+        "admin@grandaurora.az",
+        "Admin1234",
+        UserRole.ADMIN,
+        "+994 50 111 11 11",
+    ),
+    (
+        "Rashad Aliyev",
+        "manager@grandaurora.az",
+        "Manager1234",
+        UserRole.MANAGER,
+        "+994 50 222 22 22",
+    ),
+    (
+        "Nigar Huseynova",
+        "reception@grandaurora.az",
+        "Reception1234",
+        UserRole.RECEPTIONIST,
+        "+994 50 333 33 33",
+    ),
+    (
+        "Elvin Qasimov",
+        "elvin@grandaurora.az",
+        "Reception1234",
+        UserRole.RECEPTIONIST,
+        "+994 50 444 44 44",
+    ),
 ]
 
 ROOM_TYPES = [
-    ("Standard Single", "Compact room with a queen bed and city view.", "85.00", 1,
-     ["Wi-Fi", "Air conditioning", "Smart TV", "Safe"]),
-    ("Standard Double", "Comfortable double room with a work desk.", "120.00", 2,
-     ["Wi-Fi", "Air conditioning", "Smart TV", "Minibar", "Safe"]),
-    ("Deluxe Double", "Spacious room with a balcony and seating area.", "180.00", 3,
-     ["Wi-Fi", "Balcony", "Minibar", "Bathrobe", "Nespresso", "Smart TV"]),
-    ("Family Room", "Two connected bedrooms, ideal for families.", "240.00", 4,
-     ["Wi-Fi", "Two bathrooms", "Minibar", "Sofa bed", "Smart TV"]),
-    ("Executive Suite", "Separate living room, panoramic Caspian view.", "420.00", 4,
-     ["Wi-Fi", "Living room", "Jacuzzi", "Butler service", "Nespresso", "Lounge access"]),
+    (
+        "Standard Single",
+        "Compact room with a queen bed and city view.",
+        "85.00",
+        1,
+        ["Wi-Fi", "Air conditioning", "Smart TV", "Safe"],
+    ),
+    (
+        "Standard Double",
+        "Comfortable double room with a work desk.",
+        "120.00",
+        2,
+        ["Wi-Fi", "Air conditioning", "Smart TV", "Minibar", "Safe"],
+    ),
+    (
+        "Deluxe Double",
+        "Spacious room with a balcony and seating area.",
+        "180.00",
+        3,
+        ["Wi-Fi", "Balcony", "Minibar", "Bathrobe", "Nespresso", "Smart TV"],
+    ),
+    (
+        "Family Room",
+        "Two connected bedrooms, ideal for families.",
+        "240.00",
+        4,
+        ["Wi-Fi", "Two bathrooms", "Minibar", "Sofa bed", "Smart TV"],
+    ),
+    (
+        "Executive Suite",
+        "Separate living room, panoramic Caspian view.",
+        "420.00",
+        4,
+        [
+            "Wi-Fi",
+            "Living room",
+            "Jacuzzi",
+            "Butler service",
+            "Nespresso",
+            "Lounge access",
+        ],
+    ),
 ]
 
 # Rooms per floor, keyed by room-type index.
@@ -62,25 +118,147 @@ FLOOR_PLAN = {
 }
 
 GUESTS = [
-    ("Leyla Ibrahimova", "+994 55 123 45 67", "leyla.ib@example.com", "AZ", "AZE9384712", "Azerbaijan", 1988),
-    ("Michael Thornton", "+44 7700 900123", "m.thornton@example.co.uk", "GB", "GB4471209", "United Kingdom", 1975),
-    ("Sofia Rossi", "+39 340 111 2233", "sofia.rossi@example.it", "IT", "IT8823014", "Italy", 1992),
-    ("Kenan Aliyev", "+994 51 987 65 43", "kenan.a@example.com", "AZ", "AZE1128395", "Azerbaijan", 1983),
-    ("Anna Kowalski", "+48 601 234 567", "a.kowalski@example.pl", "PL", "PL5590127", "Poland", 1995),
-    ("Ahmet Yilmaz", "+90 532 444 5566", "ahmet.y@example.com.tr", "TR", "TR7781340", "Türkiye", 1979),
-    ("Fatima Al-Rashid", "+971 50 777 8899", "fatima.ar@example.ae", "AE", "AE3390188", "UAE", 1990),
-    ("Hans Müller", "+49 170 5556677", "h.mueller@example.de", "DE", "DE9912047", "Germany", 1968),
-    ("Nurana Safarova", "+994 70 333 22 11", "nurana.s@example.com", "AZ", "AZE7745120", "Azerbaijan", 1997),
-    ("Chen Wei", "+86 138 0013 8000", "chen.wei@example.cn", "CN", "CN6612903", "China", 1986),
-    ("Olga Petrova", "+7 916 555 4433", "o.petrova@example.ru", "RU", "RU4409281", "Russia", 1981),
-    ("James Okafor", "+234 802 345 6789", "j.okafor@example.ng", "NG", "NG1123409", "Nigeria", 1993),
-    ("Marie Dubois", "+33 6 12 34 56 78", "m.dubois@example.fr", "FR", "FR8890123", "France", 1989),
-    ("Tural Nabiyev", "+994 55 888 77 66", "tural.n@example.com", "AZ", "AZE2201938", "Azerbaijan", 1994),
-    ("Yuki Tanaka", "+81 90 1234 5678", "y.tanaka@example.jp", "JP", "JP5567012", "Japan", 1991),
+    (
+        "Leyla Ibrahimova",
+        "+994 55 123 45 67",
+        "leyla.ib@example.com",
+        "AZ",
+        "AZE9384712",
+        "Azerbaijan",
+        1988,
+    ),
+    (
+        "Michael Thornton",
+        "+44 7700 900123",
+        "m.thornton@example.co.uk",
+        "GB",
+        "GB4471209",
+        "United Kingdom",
+        1975,
+    ),
+    (
+        "Sofia Rossi",
+        "+39 340 111 2233",
+        "sofia.rossi@example.it",
+        "IT",
+        "IT8823014",
+        "Italy",
+        1992,
+    ),
+    (
+        "Kenan Aliyev",
+        "+994 51 987 65 43",
+        "kenan.a@example.com",
+        "AZ",
+        "AZE1128395",
+        "Azerbaijan",
+        1983,
+    ),
+    (
+        "Anna Kowalski",
+        "+48 601 234 567",
+        "a.kowalski@example.pl",
+        "PL",
+        "PL5590127",
+        "Poland",
+        1995,
+    ),
+    (
+        "Ahmet Yilmaz",
+        "+90 532 444 5566",
+        "ahmet.y@example.com.tr",
+        "TR",
+        "TR7781340",
+        "Türkiye",
+        1979,
+    ),
+    (
+        "Fatima Al-Rashid",
+        "+971 50 777 8899",
+        "fatima.ar@example.ae",
+        "AE",
+        "AE3390188",
+        "UAE",
+        1990,
+    ),
+    (
+        "Hans Müller",
+        "+49 170 5556677",
+        "h.mueller@example.de",
+        "DE",
+        "DE9912047",
+        "Germany",
+        1968,
+    ),
+    (
+        "Nurana Safarova",
+        "+994 70 333 22 11",
+        "nurana.s@example.com",
+        "AZ",
+        "AZE7745120",
+        "Azerbaijan",
+        1997,
+    ),
+    (
+        "Chen Wei",
+        "+86 138 0013 8000",
+        "chen.wei@example.cn",
+        "CN",
+        "CN6612903",
+        "China",
+        1986,
+    ),
+    (
+        "Olga Petrova",
+        "+7 916 555 4433",
+        "o.petrova@example.ru",
+        "RU",
+        "RU4409281",
+        "Russia",
+        1981,
+    ),
+    (
+        "James Okafor",
+        "+234 802 345 6789",
+        "j.okafor@example.ng",
+        "NG",
+        "NG1123409",
+        "Nigeria",
+        1993,
+    ),
+    (
+        "Marie Dubois",
+        "+33 6 12 34 56 78",
+        "m.dubois@example.fr",
+        "FR",
+        "FR8890123",
+        "France",
+        1989,
+    ),
+    (
+        "Tural Nabiyev",
+        "+994 55 888 77 66",
+        "tural.n@example.com",
+        "AZ",
+        "AZE2201938",
+        "Azerbaijan",
+        1994,
+    ),
+    (
+        "Yuki Tanaka",
+        "+81 90 1234 5678",
+        "y.tanaka@example.jp",
+        "JP",
+        "JP5567012",
+        "Japan",
+        1991,
+    ),
 ]
 
 REQUESTS = [
-    None, None, None,
+    None,
+    None,
+    None,
     "High floor, away from the lift.",
     "Late arrival — around 23:00.",
     "Extra pillows and a baby cot.",
@@ -244,7 +422,11 @@ async def seed() -> None:
                 if check_in + timedelta(days=nights) > today:
                     continue
                 reservation = make_reservation(
-                    RNG.choice(guests), room, check_in, nights, ReservationStatus.CHECKED_OUT
+                    RNG.choice(guests),
+                    room,
+                    check_in,
+                    nights,
+                    ReservationStatus.CHECKED_OUT,
                 )
                 if reservation is None:
                     continue
@@ -254,8 +436,11 @@ async def seed() -> None:
         for _ in range(6):
             check_in = today - timedelta(days=RNG.randint(1, 30))
             reservation = make_reservation(
-                RNG.choice(guests), RNG.choice(rooms), check_in,
-                RNG.randint(1, 3), ReservationStatus.CANCELLED,
+                RNG.choice(guests),
+                RNG.choice(rooms),
+                check_in,
+                RNG.randint(1, 3),
+                ReservationStatus.CANCELLED,
             )
             if reservation:
                 reservations.append(reservation)
@@ -267,7 +452,10 @@ async def seed() -> None:
             if check_in + timedelta(days=nights) <= today:
                 nights = (today - check_in).days + RNG.randint(1, 3)
             reservation = make_reservation(
-                RNG.choice(guests), RNG.choice(rooms), check_in, nights,
+                RNG.choice(guests),
+                RNG.choice(rooms),
+                check_in,
+                nights,
                 ReservationStatus.CHECKED_IN,
             )
             if reservation:
@@ -278,7 +466,10 @@ async def seed() -> None:
             nights = RNG.randint(2, 4)
             check_in = today - timedelta(days=nights)
             reservation = make_reservation(
-                RNG.choice(guests), RNG.choice(rooms), check_in, nights,
+                RNG.choice(guests),
+                RNG.choice(rooms),
+                check_in,
+                nights,
                 ReservationStatus.CHECKED_IN,
             )
             if reservation:
@@ -287,8 +478,11 @@ async def seed() -> None:
         # --- arrivals today ------------------------------------------------
         for _ in range(5):
             reservation = make_reservation(
-                RNG.choice(guests), RNG.choice(rooms), today,
-                RNG.choice([1, 2, 2, 3, 5]), ReservationStatus.CONFIRMED,
+                RNG.choice(guests),
+                RNG.choice(rooms),
+                today,
+                RNG.choice([1, 2, 2, 3, 5]),
+                ReservationStatus.CONFIRMED,
             )
             if reservation:
                 reservations.append(reservation)
@@ -303,8 +497,11 @@ async def seed() -> None:
                     else ReservationStatus.CONFIRMED
                 )
                 reservation = make_reservation(
-                    RNG.choice(guests), RNG.choice(rooms), check_in,
-                    RNG.choice([1, 2, 2, 3, 4, 7]), status,
+                    RNG.choice(guests),
+                    RNG.choice(rooms),
+                    check_in,
+                    RNG.choice([1, 2, 2, 3, 4, 7]),
+                    status,
                 )
                 if reservation:
                     reservations.append(reservation)
@@ -362,7 +559,9 @@ async def seed() -> None:
                             note="50% deposit.",
                         )
                     )
-            elif reservation.status == ReservationStatus.CONFIRMED and RNG.random() < 0.35:
+            elif (
+                reservation.status == ReservationStatus.CONFIRMED and RNG.random() < 0.35
+            ):
                 deposit = (total * Decimal("0.3")).quantize(Decimal("0.01"))
                 payments.append(
                     Payment(

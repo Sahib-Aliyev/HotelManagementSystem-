@@ -133,15 +133,12 @@ class RoomRepository(BaseRepository[Room]):
 
     async def occupied_on(self, day: date) -> int:
         """How many rooms are sold for the night beginning on `day`."""
-        stmt = (
-            select(func.count(func.distinct(Reservation.room_id)))
-            .where(
-                Reservation.status.in_(BLOCKING_STATUSES),
-                and_(
-                    Reservation.check_in_date <= day,
-                    Reservation.check_out_date > day,
-                ),
-            )
+        stmt = select(func.count(func.distinct(Reservation.room_id))).where(
+            Reservation.status.in_(BLOCKING_STATUSES),
+            and_(
+                Reservation.check_in_date <= day,
+                Reservation.check_out_date > day,
+            ),
         )
         return int((await self.db.execute(stmt)).scalar_one())
 
@@ -201,9 +198,7 @@ class RoomRepository(BaseRepository[Room]):
         return int((await self.db.execute(stmt)).scalar() or 0)
 
     async def largest_party_for_room(self, room_id: int) -> int:
-        stmt = select(
-            func.max(Reservation.adults + Reservation.children)
-        ).where(
+        stmt = select(func.max(Reservation.adults + Reservation.children)).where(
             Reservation.room_id == room_id,
             Reservation.status.in_(BLOCKING_STATUSES),
         )

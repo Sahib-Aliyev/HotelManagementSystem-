@@ -70,9 +70,7 @@ def _redirect_to_login(path: str) -> RedirectResponse:
 async def login_page(request: Request, user: OptionalUser):
     if user is not None:
         return RedirectResponse(url="/", status_code=303)
-    return templates.TemplateResponse(
-        "login.html", _context(request, None, page="login")
-    )
+    return templates.TemplateResponse("login.html", _context(request, None, page="login"))
 
 
 @router.get("/", response_class=HTMLResponse)

@@ -117,9 +117,7 @@ class GuestService:
         delete.
         """
         guest = await self.get(guest_id)
-        _, reservation_count = await self.reservations.search(
-            guest_id=guest_id, limit=1
-        )
+        _, reservation_count = await self.reservations.search(guest_id=guest_id, limit=1)
         if reservation_count:
             raise ConflictError(
                 "This guest has reservation history and cannot be deleted. "

@@ -62,12 +62,18 @@ async def test_booking_is_created_and_priced(reception_client, seeded):
 
 async def test_each_booking_gets_a_unique_reference(reception_client, seeded):
     first = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][0].id, check_in=1, check_out=2,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][0].id,
+        check_in=1,
+        check_out=2,
     )
     second = await book(
-        reception_client, guest_id=seeded["guests"][1].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=2,
+        reception_client,
+        guest_id=seeded["guests"][1].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=2,
     )
     assert first.json()["reference"] != second.json()["reference"]
 
@@ -125,14 +131,20 @@ async def test_walk_in_honours_a_nightly_rate_override(manager_client, seeded):
 async def test_identical_dates_are_rejected(reception_client, seeded):
     room_id = seeded["rooms"][1].id
     first = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=room_id, check_in=5, check_out=8,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=room_id,
+        check_in=5,
+        check_out=8,
     )
     assert first.status_code == 201
 
     clash = await book(
-        reception_client, guest_id=seeded["guests"][1].id,
-        room_id=room_id, check_in=5, check_out=8,
+        reception_client,
+        guest_id=seeded["guests"][1].id,
+        room_id=room_id,
+        check_in=5,
+        check_out=8,
     )
     assert clash.status_code == 409
     assert clash.json()["error"]["code"] == "conflict"
@@ -152,14 +164,20 @@ async def test_partial_overlaps_are_rejected(
 ):
     room_id = seeded["rooms"][1].id
     existing = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=room_id, check_in=5, check_out=9,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=room_id,
+        check_in=5,
+        check_out=9,
     )
     assert existing.status_code == 201
 
     clash = await book(
-        reception_client, guest_id=seeded["guests"][1].id,
-        room_id=room_id, check_in=check_in, check_out=check_out,
+        reception_client,
+        guest_id=seeded["guests"][1].id,
+        room_id=room_id,
+        check_in=check_in,
+        check_out=check_out,
     )
     assert clash.status_code == 409, f"should reject a stay {description}"
 
@@ -168,12 +186,18 @@ async def test_same_day_turnover_is_allowed(reception_client, seeded):
     """One guest checks out the morning another checks in — not an overlap."""
     room_id = seeded["rooms"][1].id
     await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=room_id, check_in=2, check_out=5,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=room_id,
+        check_in=2,
+        check_out=5,
     )
     turnover = await book(
-        reception_client, guest_id=seeded["guests"][1].id,
-        room_id=room_id, check_in=5, check_out=7,
+        reception_client,
+        guest_id=seeded["guests"][1].id,
+        room_id=room_id,
+        check_in=5,
+        check_out=7,
     )
     assert turnover.status_code == 201
 
@@ -181,14 +205,20 @@ async def test_same_day_turnover_is_allowed(reception_client, seeded):
 async def test_cancelling_frees_the_room(reception_client, seeded):
     room_id = seeded["rooms"][1].id
     booking = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=room_id, check_in=3, check_out=6,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=room_id,
+        check_in=3,
+        check_out=6,
     )
     reservation_id = booking.json()["id"]
 
     blocked = await book(
-        reception_client, guest_id=seeded["guests"][1].id,
-        room_id=room_id, check_in=3, check_out=6,
+        reception_client,
+        guest_id=seeded["guests"][1].id,
+        room_id=room_id,
+        check_in=3,
+        check_out=6,
     )
     assert blocked.status_code == 409
 
@@ -197,8 +227,11 @@ async def test_cancelling_frees_the_room(reception_client, seeded):
     )
 
     now_free = await book(
-        reception_client, guest_id=seeded["guests"][1].id,
-        room_id=room_id, check_in=3, check_out=6,
+        reception_client,
+        guest_id=seeded["guests"][1].id,
+        room_id=room_id,
+        check_in=3,
+        check_out=6,
     )
     assert now_free.status_code == 201
 
@@ -206,16 +239,22 @@ async def test_cancelling_frees_the_room(reception_client, seeded):
 # ------------------------------------------------------------- validation
 async def test_past_check_in_is_rejected(reception_client, seeded):
     response = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][0].id, check_in=-3, check_out=2,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][0].id,
+        check_in=-3,
+        check_out=2,
     )
     assert response.status_code == 422
 
 
 async def test_check_out_must_follow_check_in(reception_client, seeded):
     response = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][0].id, check_in=5, check_out=5,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][0].id,
+        check_in=5,
+        check_out=5,
     )
     assert response.status_code == 422
 
@@ -234,8 +273,11 @@ async def test_occupancy_cannot_exceed_room_capacity(reception_client, seeded):
 
 async def test_booking_an_unknown_room_is_a_404(reception_client, seeded):
     response = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=99999, check_in=1, check_out=2,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=99999,
+        check_in=1,
+        check_out=2,
     )
     assert response.status_code == 404
 
@@ -244,8 +286,11 @@ async def test_booking_an_unknown_room_is_a_404(reception_client, seeded):
 async def test_availability_excludes_a_booked_room(reception_client, seeded):
     room_id = seeded["rooms"][1].id
     await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=room_id, check_in=4, check_out=7,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=room_id,
+        check_in=4,
+        check_out=7,
     )
 
     response = await reception_client.get(
@@ -280,8 +325,11 @@ async def test_maintenance_rooms_are_never_offered(manager_client, seeded):
     assert room_id not in [room["id"] for room in response.json()]
 
     blocked = await book(
-        manager_client, guest_id=seeded["guests"][0].id,
-        room_id=room_id, check_in=1, check_out=3,
+        manager_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=room_id,
+        check_in=1,
+        check_out=3,
     )
     assert blocked.status_code == 409
 
@@ -289,8 +337,11 @@ async def test_maintenance_rooms_are_never_offered(manager_client, seeded):
 # ------------------------------------------------------------- lifecycle
 async def test_cannot_check_in_before_the_arrival_date(reception_client, seeded):
     booking = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][0].id, check_in=5, check_out=7,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][0].id,
+        check_in=5,
+        check_out=7,
     )
     response = await reception_client.post(
         f"/api/v1/reservations/{booking.json()['id']}/check-in"
@@ -301,8 +352,11 @@ async def test_cannot_check_in_before_the_arrival_date(reception_client, seeded)
 async def test_full_stay_lifecycle(reception_client, seeded):
     room_id = seeded["rooms"][1].id
     booking = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=room_id, check_in=0, check_out=2,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=room_id,
+        check_in=0,
+        check_out=2,
     )
     reservation_id = booking.json()["id"]
 
@@ -324,7 +378,9 @@ async def test_full_stay_lifecycle(reception_client, seeded):
 
     # Paying the room charge alone would leave VAT outstanding — pay the
     # folio's VAT-inclusive total instead.
-    folio = (await reception_client.get(f"/api/v1/payments/folio/{reservation_id}")).json()
+    folio = (
+        await reception_client.get(f"/api/v1/payments/folio/{reservation_id}")
+    ).json()
     await reception_client.post(
         "/api/v1/payments",
         json={
@@ -347,21 +403,29 @@ async def test_full_stay_lifecycle(reception_client, seeded):
 
 async def test_double_check_in_is_rejected(reception_client, seeded):
     booking = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=0, check_out=2,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=0,
+        check_out=2,
     )
     reservation_id = booking.json()["id"]
 
-    assert (await reception_client.post(
-        f"/api/v1/reservations/{reservation_id}/check-in")).status_code == 200
-    assert (await reception_client.post(
-        f"/api/v1/reservations/{reservation_id}/check-in")).status_code == 409
+    assert (
+        await reception_client.post(f"/api/v1/reservations/{reservation_id}/check-in")
+    ).status_code == 200
+    assert (
+        await reception_client.post(f"/api/v1/reservations/{reservation_id}/check-in")
+    ).status_code == 409
 
 
 async def test_completed_stay_cannot_be_cancelled(reception_client, seeded):
     booking = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=0, check_out=2,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=0,
+        check_out=2,
     )
     reservation_id = booking.json()["id"]
 
@@ -391,8 +455,11 @@ async def test_completed_stay_cannot_be_cancelled(reception_client, seeded):
 # --------------------------------------------------------------- payments
 async def test_overpayment_is_rejected(reception_client, seeded):
     booking = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
     )
     response = await reception_client.post(
         "/api/v1/payments",
@@ -408,12 +475,17 @@ async def test_overpayment_is_rejected(reception_client, seeded):
 
 async def test_folio_applies_vat_and_tracks_the_balance(reception_client, seeded):
     booking = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
     )
     reservation_id = booking.json()["id"]
 
-    folio = (await reception_client.get(f"/api/v1/payments/folio/{reservation_id}")).json()
+    folio = (
+        await reception_client.get(f"/api/v1/payments/folio/{reservation_id}")
+    ).json()
     assert float(folio["subtotal"]) == 300.00
     assert float(folio["tax_amount"]) == 54.00  # 18% VAT
     assert float(folio["total"]) == 354.00
@@ -430,20 +502,23 @@ async def test_folio_applies_vat_and_tracks_the_balance(reception_client, seeded
             "status": "paid",
         },
     )
-    folio = (await reception_client.get(f"/api/v1/payments/folio/{reservation_id}")).json()
+    folio = (
+        await reception_client.get(f"/api/v1/payments/folio/{reservation_id}")
+    ).json()
     assert float(folio["amount_paid"]) == 150.00
     assert float(folio["balance_due"]) == 204.00  # 354.00 - 150.00, VAT included
 
 
 async def test_invoice_pdf_is_generated(reception_client, seeded):
     booking = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
     )
     reservation_id = booking.json()["id"]
-    issued = await reception_client.post(
-        f"/api/v1/invoices/reservation/{reservation_id}"
-    )
+    issued = await reception_client.post(f"/api/v1/invoices/reservation/{reservation_id}")
     assert issued.status_code == 201
 
     response = await reception_client.get(
@@ -463,14 +538,15 @@ async def test_the_pdf_route_does_not_issue_an_invoice_by_itself(
     samesite=lax cookie, a link in an email was enough to trigger it.
     """
     booking = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
     )
     reservation_id = booking.json()["id"]
 
-    pdf = await reception_client.get(
-        f"/api/v1/invoices/reservation/{reservation_id}/pdf"
-    )
+    pdf = await reception_client.get(f"/api/v1/invoices/reservation/{reservation_id}/pdf")
     assert pdf.status_code == 404
 
     still_none = await reception_client.get(
@@ -481,8 +557,11 @@ async def test_the_pdf_route_does_not_issue_an_invoice_by_itself(
 
 async def test_issuing_an_invoice_twice_returns_the_same_one(reception_client, seeded):
     booking = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
     )
     reservation_id = booking.json()["id"]
     path = f"/api/v1/invoices/reservation/{reservation_id}"
@@ -500,7 +579,9 @@ async def test_duplicate_document_number_is_rejected(reception_client):
         "document_type": "passport",
         "document_number": "DUP12345",
     }
-    assert (await reception_client.post("/api/v1/guests", json=payload)).status_code == 201
+    assert (
+        await reception_client.post("/api/v1/guests", json=payload)
+    ).status_code == 201
 
     payload["full_name"] = "Second Person"
     clash = await reception_client.post("/api/v1/guests", json=payload)
@@ -546,8 +627,11 @@ async def test_future_date_of_birth_is_rejected(reception_client):
 # ------------------------------------------------------------- front desk
 async def test_front_desk_lists_todays_arrivals(reception_client, seeded):
     await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=0, check_out=2,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=0,
+        check_out=2,
     )
     board = (await reception_client.get("/api/v1/reservations/front-desk")).json()
     assert len(board["arrivals"]) == 1
@@ -556,8 +640,11 @@ async def test_front_desk_lists_todays_arrivals(reception_client, seeded):
 
 async def test_dashboard_reports_occupancy(reception_client, seeded):
     await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=0, check_out=3,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=0,
+        check_out=3,
     )
     stats = (await reception_client.get("/api/v1/reports/dashboard")).json()["stats"]
     assert stats["rooms_total"] == 3
@@ -573,8 +660,11 @@ async def test_patch_cannot_stretch_a_stay_past_the_maximum(reception_client, se
     the stay at 291,221,300.00 — over what Numeric(10, 2) can hold.
     """
     booking_response = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
     )
     reservation_id = booking_response.json()["id"]
 
@@ -591,8 +681,11 @@ async def test_patch_cannot_stretch_a_stay_past_the_maximum(reception_client, se
 async def test_patch_cannot_backdate_a_stay(reception_client, seeded):
     """Backdating feeds fabricated nights into occupancy and ADR."""
     booking_response = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
     )
     reservation_id = booking_response.json()["id"]
 
@@ -606,8 +699,11 @@ async def test_patch_cannot_backdate_a_stay(reception_client, seeded):
 async def test_patch_still_accepts_a_legitimate_change(reception_client, seeded):
     """The guard above must not block ordinary edits."""
     booking_response = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
     )
     reservation_id = booking_response.json()["id"]
 
@@ -629,8 +725,11 @@ async def test_patch_with_an_explicit_null_is_rejected_not_a_crash(
     value, and the arithmetic below it raised a TypeError — an unhandled 500.
     """
     booking_response = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3,
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
     )
     reservation_id = booking_response.json()["id"]
 
@@ -755,8 +854,11 @@ async def test_a_stale_booking_still_counts_as_holding_its_room(
 # ------------------------------------------------------- cancelling a stay in house
 async def _checked_in_stay(client, seeded) -> int:
     booking_response = await book(
-        client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=0, check_out=2,
+        client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=0,
+        check_out=2,
     )
     reservation_id = booking_response.json()["id"]
     checked_in = await client.post(f"/api/v1/reservations/{reservation_id}/check-in")
@@ -814,9 +916,7 @@ async def test_a_manager_must_write_off_the_balance_to_cancel_an_in_house_stay(
 
 
 # ------------------------------------------------ housekeeping vs occupancy
-async def test_cleaning_an_occupied_room_returns_it_to_occupied(
-    reception_client, seeded
-):
+async def test_cleaning_an_occupied_room_returns_it_to_occupied(reception_client, seeded):
     """A room with a guest checked into it is never "available".
 
     Housekeeping cleans occupied rooms daily, and "Mark clean" used to put the
@@ -841,18 +941,16 @@ async def test_cleaning_an_occupied_room_returns_it_to_occupied(
         f"/api/v1/rooms/{room_id}/status", json={"status": "available"}
     )
     assert cleaned.status_code == 200
-    assert cleaned.json()["status"] == "occupied", (
-        "the guest is still checked in, so the room goes back to occupied"
-    )
+    assert (
+        cleaned.json()["status"] == "occupied"
+    ), "the guest is still checked in, so the room goes back to occupied"
 
     # And the stay itself is untouched by any of that.
     stay = await reception_client.get(f"/api/v1/reservations/{reservation_id}")
     assert stay.json()["status"] == "checked_in"
 
 
-async def test_a_room_without_a_guest_still_becomes_available(
-    reception_client, seeded
-):
+async def test_a_room_without_a_guest_still_becomes_available(reception_client, seeded):
     """The rule above must not trap an empty room in cleaning."""
     room_id = seeded["rooms"][2].id
     await reception_client.post(
@@ -913,9 +1011,7 @@ async def test_checking_out_leaves_the_room_ready_to_clean_and_then_sell(
 # walking code paths, and these are the reservation-side answers it found.
 
 
-async def test_a_room_cannot_hold_two_checked_in_stays(
-    manager_client, seeded, db
-):
+async def test_a_room_cannot_hold_two_checked_in_stays(manager_client, seeded, db):
     """Same-day turnover is sellable but not occupiable twice.
 
     Overlap uses strict comparisons on purpose, so a stay ending today and a
@@ -939,8 +1035,11 @@ async def test_a_room_cannot_hold_two_checked_in_stays(
     await db.commit()
 
     arriving = await book(
-        manager_client, guest_id=seeded["guests"][1].id,
-        room_id=room_id, check_in=0, check_out=2,
+        manager_client,
+        guest_id=seeded["guests"][1].id,
+        room_id=room_id,
+        check_in=0,
+        check_out=2,
     )
     assert arriving.status_code == 201, "the booking itself is legal"
 
@@ -975,8 +1074,11 @@ async def test_check_in_succeeds_once_the_room_is_actually_empty(
     await db.commit()
 
     arriving = await book(
-        manager_client, guest_id=seeded["guests"][1].id,
-        room_id=room_id, check_in=0, check_out=2,
+        manager_client,
+        guest_id=seeded["guests"][1].id,
+        room_id=room_id,
+        check_in=0,
+        check_out=2,
     )
     reservation_id = arriving.json()["id"]
 
@@ -986,9 +1088,7 @@ async def test_check_in_succeeds_once_the_room_is_actually_empty(
     )
     assert checked_out.status_code == 200
 
-    arrived = await manager_client.post(
-        f"/api/v1/reservations/{reservation_id}/check-in"
-    )
+    arrived = await manager_client.post(f"/api/v1/reservations/{reservation_id}/check-in")
     assert arrived.status_code == 200
     assert arrived.json()["status"] == "checked_in"
 
@@ -1015,7 +1115,9 @@ async def test_a_lost_booking_race_is_a_conflict_not_a_500(manager_client, seede
             raise IntegrityError(
                 "INSERT INTO reservations …",
                 {},
-                Exception('conflicting key value violates exclusion constraint "no_double_booking"'),
+                Exception(
+                    'conflicting key value violates exclusion constraint "no_double_booking"'
+                ),
             )
 
         async def rollback(self):
@@ -1035,8 +1137,11 @@ async def test_a_room_with_future_bookings_cannot_go_out_of_service(
     booking alive and unfulfillable — nothing said so until the guest arrived."""
     room_id = seeded["rooms"][1].id
     created = await book(
-        manager_client, guest_id=seeded["guests"][0].id,
-        room_id=room_id, check_in=5, check_out=7,
+        manager_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=room_id,
+        check_in=5,
+        check_out=7,
     )
     assert created.status_code == 201
 
@@ -1063,8 +1168,12 @@ async def test_capacity_cannot_shrink_below_a_live_booking(manager_client, seede
     it under one left that booking in violation of a rule it could no longer be
     edited without tripping."""
     created = await book(
-        manager_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3, adults=2,
+        manager_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
+        adults=2,
     )
     assert created.status_code == 201
 
@@ -1087,8 +1196,12 @@ async def test_a_room_cannot_move_to_a_type_too_small_for_its_booking(
 ):
     """The same shrink, reached sideways through `room_type_id`."""
     created = await book(
-        manager_client, guest_id=seeded["guests"][0].id,
-        room_id=seeded["rooms"][1].id, check_in=1, check_out=3, adults=2,
+        manager_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+        check_in=1,
+        check_out=3,
+        adults=2,
     )
     assert created.status_code == 201
 

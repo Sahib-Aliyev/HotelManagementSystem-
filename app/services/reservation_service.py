@@ -64,9 +64,7 @@ class ReservationService:
             UserRole.ADMIN,
             UserRole.MANAGER,
         ):
-            raise PermissionDeniedError(
-                f"Only a manager or administrator can {action}."
-            )
+            raise PermissionDeniedError(f"Only a manager or administrator can {action}.")
 
     @classmethod
     def _assert_may_set_rate(

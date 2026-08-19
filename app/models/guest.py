@@ -26,9 +26,7 @@ class Guest(Base, TimestampMixin):
     # The same document number may legitimately repeat across document types,
     # so uniqueness is on the pair.
     __table_args__ = (
-        UniqueConstraint(
-            "document_type", "document_number", name="uq_guest_document"
-        ),
+        UniqueConstraint("document_type", "document_number", name="uq_guest_document"),
     )
 
     full_name: Mapped[str] = mapped_column(String(120), index=True, nullable=False)

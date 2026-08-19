@@ -121,7 +121,8 @@ class Settings(BaseSettings):
             )
         if problems:
             raise ValueError(
-                "Refusing to start with APP_ENV=production:\n  - " + "\n  - ".join(problems)
+                "Refusing to start with APP_ENV=production:\n  - "
+                + "\n  - ".join(problems)
             )
         return self
 

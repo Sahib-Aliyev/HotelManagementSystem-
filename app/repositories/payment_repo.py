@@ -84,13 +84,10 @@ class PaymentRepository(BaseRepository[Payment]):
     async def revenue_by_day(self, start: date, end: date) -> dict[date, Decimal]:
         start_dt, _ = _day_bounds(start)
         _, end_dt = _day_bounds(end)
-        stmt = (
-            select(Payment.paid_at, signed_amount())
-            .where(
-                is_cash_movement(),
-                Payment.paid_at >= start_dt,
-                Payment.paid_at <= end_dt,
-            )
+        stmt = select(Payment.paid_at, signed_amount()).where(
+            is_cash_movement(),
+            Payment.paid_at >= start_dt,
+            Payment.paid_at <= end_dt,
         )
         # Grouped in Python so the same code works on SQLite and PostgreSQL
         # without dialect-specific date truncation.

@@ -30,7 +30,9 @@ def _strong_enough(value: str) -> str:
 
 #: bcrypt truncates past 72 bytes, so that is the hard ceiling everywhere.
 Password = Annotated[
-    str, Field(min_length=MIN_PASSWORD_LENGTH, max_length=72), AfterValidator(_strong_enough)
+    str,
+    Field(min_length=MIN_PASSWORD_LENGTH, max_length=72),
+    AfterValidator(_strong_enough),
 ]
 
 

@@ -55,9 +55,7 @@ class RoomService:
         await self.db.commit()
         return room_type
 
-    async def update_type(
-        self, room_type_id: int, payload: RoomTypeUpdate
-    ) -> RoomType:
+    async def update_type(self, room_type_id: int, payload: RoomTypeUpdate) -> RoomType:
         room_type = await self.get_type(room_type_id)
         data = payload.model_dump(exclude_unset=True)
         if data.get("name"):

@@ -40,6 +40,8 @@ def _esc(value: object) -> str:
     only Paragraph content needs this.
     """
     return escape("" if value is None else str(value))
+
+
 ACCENT = colors.HexColor("#10B981")
 MUTED = colors.HexColor("#64748B")
 
@@ -121,7 +123,9 @@ class InvoiceService:
 
         story = [
             Paragraph(_esc(settings.APP_NAME), h1),
-            Paragraph("Baku, Azerbaijan · +994 12 000 00 00 · stay@grandaurora.az", small),
+            Paragraph(
+                "Baku, Azerbaijan · +994 12 000 00 00 · stay@grandaurora.az", small
+            ),
             Spacer(1, 10 * mm),
         ]
 
@@ -207,7 +211,12 @@ class InvoiceService:
                     ("LINEABOVE", (1, last - 4), (-1, last - 4), 0.5, MUTED),
                     ("FONTNAME", (1, last - 2), (-1, last - 2), "Helvetica-Bold"),
                     ("FONTNAME", (1, last), (-1, last), "Helvetica-Bold"),
-                    ("TEXTCOLOR", (1, last), (-1, last), ACCENT if folio.balance_due <= 0 else colors.HexColor("#DC2626")),
+                    (
+                        "TEXTCOLOR",
+                        (1, last),
+                        (-1, last),
+                        ACCENT if folio.balance_due <= 0 else colors.HexColor("#DC2626"),
+                    ),
                     ("LINEABOVE", (1, last), (-1, last), 0.5, MUTED),
                 ]
             )

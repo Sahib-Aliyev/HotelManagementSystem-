@@ -46,7 +46,9 @@ async def get_current_user(request: Request, db: DbSession) -> User:
         raise AuthenticationError("Account no longer exists.")
     if not user.is_active:
         raise PermissionDeniedError("This account has been deactivated.")
-    if not fingerprints_match(payload.get("pwf"), password_fingerprint(user.hashed_password)):
+    if not fingerprints_match(
+        payload.get("pwf"), password_fingerprint(user.hashed_password)
+    ):
         raise AuthenticationError("Your password changed. Please sign in again.")
     # Bumped on sign-out, which is what makes logout actually revoke the token.
     if int(payload.get("tv", 0)) != int(user.token_version or 0):

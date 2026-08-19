@@ -86,9 +86,7 @@ async def test_manager_may_still_override_the_nightly_rate(manager_client, seede
     assert float(response.json()["nightly_rate"]) == 99.00
 
 
-async def test_receptionist_can_still_book_at_the_standard_rate(
-    reception_client, seeded
-):
+async def test_receptionist_can_still_book_at_the_standard_rate(reception_client, seeded):
     response = await reception_client.post(
         "/api/v1/reservations",
         json=booking(seeded["guests"][0].id, seeded["rooms"][1].id),

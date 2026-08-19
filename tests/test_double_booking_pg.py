@@ -119,8 +119,7 @@ async def test_the_database_refuses_the_second_of_two_racing_bookings(
 
     failures = [r for r in results if isinstance(r, IntegrityError)]
     assert len(failures) == 1, (
-        "exactly one of the two concurrent bookings must be refused; "
-        f"got {results}"
+        "exactly one of the two concurrent bookings must be refused; " f"got {results}"
     )
     assert "no_double_booking" in str(failures[0].orig)
 

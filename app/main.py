@@ -71,9 +71,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 if settings.trusted_host_list != ["*"]:
-    app.add_middleware(
-        TrustedHostMiddleware, allowed_hosts=settings.trusted_host_list
-    )
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_host_list)
 
 app.add_middleware(
     CORSMiddleware,
@@ -87,9 +85,7 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
-app.mount(
-    "/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static"
-)
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 app.include_router(api_router)
 app.include_router(web_router)

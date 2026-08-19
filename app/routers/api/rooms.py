@@ -110,9 +110,7 @@ async def list_room_types(db: DbSession, _user: StaffUser):
 
 
 @types_router.post("", response_model=RoomTypeRead, status_code=status.HTTP_201_CREATED)
-async def create_room_type(
-    payload: RoomTypeCreate, db: DbSession, _manager: ManagerUser
-):
+async def create_room_type(payload: RoomTypeCreate, db: DbSession, _manager: ManagerUser):
     return await RoomService(db).create_type(payload)
 
 
