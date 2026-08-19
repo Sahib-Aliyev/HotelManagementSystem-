@@ -266,20 +266,21 @@ async def test_availability_filters_by_capacity(reception_client, seeded):
     assert all(room["room_type"]["capacity"] >= 2 for room in rooms)
 
 
-async def test_maintenance_rooms_are_never_offered(reception_client, seeded):
+async def test_maintenance_rooms_are_never_offered(manager_client, seeded):
     room_id = seeded["rooms"][2].id
-    await reception_client.post(
-        f"/api/v1/rooms/{room_id}/status", params={"new_status": "maintenance"}
+    out_of_service = await manager_client.post(
+        f"/api/v1/rooms/{room_id}/status", json={"status": "maintenance"}
     )
+    assert out_of_service.status_code == 200, out_of_service.text
 
-    response = await reception_client.get(
+    response = await manager_client.get(
         "/api/v1/rooms/availability",
         params={"check_in_date": iso(1), "check_out_date": iso(3)},
     )
     assert room_id not in [room["id"] for room in response.json()]
 
     blocked = await book(
-        reception_client, guest_id=seeded["guests"][0].id,
+        manager_client, guest_id=seeded["guests"][0].id,
         room_id=room_id, check_in=1, check_out=3,
     )
     assert blocked.status_code == 409
@@ -831,13 +832,13 @@ async def test_cleaning_an_occupied_room_returns_it_to_occupied(
 
     # Daily housekeeping on an in-house room is legitimate.
     flagged = await reception_client.post(
-        f"/api/v1/rooms/{room_id}/status", params={"new_status": "cleaning"}
+        f"/api/v1/rooms/{room_id}/status", json={"status": "cleaning"}
     )
     assert flagged.status_code == 200
     assert flagged.json()["status"] == "cleaning"
 
     cleaned = await reception_client.post(
-        f"/api/v1/rooms/{room_id}/status", params={"new_status": "available"}
+        f"/api/v1/rooms/{room_id}/status", json={"status": "available"}
     )
     assert cleaned.status_code == 200
     assert cleaned.json()["status"] == "occupied", (
@@ -855,10 +856,10 @@ async def test_a_room_without_a_guest_still_becomes_available(
     """The rule above must not trap an empty room in cleaning."""
     room_id = seeded["rooms"][2].id
     await reception_client.post(
-        f"/api/v1/rooms/{room_id}/status", params={"new_status": "cleaning"}
+        f"/api/v1/rooms/{room_id}/status", json={"status": "cleaning"}
     )
     cleaned = await reception_client.post(
-        f"/api/v1/rooms/{room_id}/status", params={"new_status": "available"}
+        f"/api/v1/rooms/{room_id}/status", json={"status": "available"}
     )
     assert cleaned.json()["status"] == "available"
 
@@ -902,6 +903,198 @@ async def test_checking_out_leaves_the_room_ready_to_clean_and_then_sell(
     assert room.json()["status"] == "cleaning"
 
     cleaned = await reception_client.post(
-        f"/api/v1/rooms/{room_id}/status", params={"new_status": "available"}
+        f"/api/v1/rooms/{room_id}/status", json={"status": "available"}
     )
     assert cleaned.json()["status"] == "available"
+
+
+# ================================================ audit of 2026-08-19
+# The audit asked what states the application can be driven into, rather than
+# walking code paths, and these are the reservation-side answers it found.
+
+
+async def test_a_room_cannot_hold_two_checked_in_stays(
+    manager_client, seeded, db
+):
+    """Same-day turnover is sellable but not occupiable twice.
+
+    Overlap uses strict comparisons on purpose, so a stay ending today and a
+    stay starting today are both legal on the calendar. Nothing used to stop the
+    arriving guest being checked into a room the departing one had not left —
+    which is how room 502 came to hold two simultaneous checked-in reservations.
+    """
+    room_id = seeded["rooms"][1].id
+    leaving = Reservation(
+        reference="BKLEAVING",
+        guest_id=seeded["guests"][0].id,
+        room_id=room_id,
+        check_in_date=TODAY - timedelta(days=2),
+        check_out_date=TODAY,
+        adults=1,
+        status=ReservationStatus.CHECKED_IN,
+        nightly_rate=Decimal("150.00"),
+        total_price=Decimal("300.00"),
+    )
+    db.add(leaving)
+    await db.commit()
+
+    arriving = await book(
+        manager_client, guest_id=seeded["guests"][1].id,
+        room_id=room_id, check_in=0, check_out=2,
+    )
+    assert arriving.status_code == 201, "the booking itself is legal"
+
+    refused = await manager_client.post(
+        f"/api/v1/reservations/{arriving.json()['id']}/check-in"
+    )
+    assert refused.status_code == 409
+    assert "still occupied" in refused.json()["error"]["message"]
+    assert refused.json()["error"]["details"]["occupied_by"] == "BKLEAVING"
+
+    occupants = await ReservationRepository(db).active_for_room(room_id)
+    assert len(occupants) == 1, "one room, one set of occupants"
+
+
+async def test_check_in_succeeds_once_the_room_is_actually_empty(
+    manager_client, seeded, db
+):
+    """The other half of the rule above: turnover still works, in order."""
+    room_id = seeded["rooms"][1].id
+    leaving = Reservation(
+        reference="BKLEAVING2",
+        guest_id=seeded["guests"][0].id,
+        room_id=room_id,
+        check_in_date=TODAY - timedelta(days=2),
+        check_out_date=TODAY,
+        adults=1,
+        status=ReservationStatus.CHECKED_IN,
+        nightly_rate=Decimal("150.00"),
+        total_price=Decimal("300.00"),
+    )
+    db.add(leaving)
+    await db.commit()
+
+    arriving = await book(
+        manager_client, guest_id=seeded["guests"][1].id,
+        room_id=room_id, check_in=0, check_out=2,
+    )
+    reservation_id = arriving.json()["id"]
+
+    checked_out = await manager_client.post(
+        f"/api/v1/reservations/{leaving.id}/check-out",
+        json={"allow_outstanding_balance": True},
+    )
+    assert checked_out.status_code == 200
+
+    arrived = await manager_client.post(
+        f"/api/v1/reservations/{reservation_id}/check-in"
+    )
+    assert arrived.status_code == 200
+    assert arrived.json()["status"] == "checked_in"
+
+
+async def test_a_lost_booking_race_is_a_conflict_not_a_500(manager_client, seeded):
+    """`_assert_room_free` reads and the insert writes, so two concurrent
+    requests can both pass the check. PostgreSQL refuses the second with the
+    `no_double_booking` exclusion constraint, and that arrives as an
+    `IntegrityError` — which is not an `AppError`, so unmapped it would bypass
+    the exception handlers and answer 500 instead of a message anyone can act on.
+
+    The constraint itself is PostgreSQL-only (SQLite cannot express it), so what
+    is pinned here is the translation.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from app.core.exceptions import ConflictError
+    from app.services.reservation_service import ReservationService
+
+    service = ReservationService.__new__(ReservationService)
+
+    class _FailingSession:
+        async def commit(self):
+            raise IntegrityError(
+                "INSERT INTO reservations …",
+                {},
+                Exception('conflicting key value violates exclusion constraint "no_double_booking"'),
+            )
+
+        async def rollback(self):
+            self.rolled_back = True
+
+    service.db = _FailingSession()
+    with pytest.raises(ConflictError) as raised:
+        await service._commit_booking()
+    assert "booked for part of these dates" in str(raised.value)
+    assert service.db.rolled_back is True
+
+
+async def test_a_room_with_future_bookings_cannot_go_out_of_service(
+    manager_client, seeded
+):
+    """Taking the room out of service used to succeed silently and leave the
+    booking alive and unfulfillable — nothing said so until the guest arrived."""
+    room_id = seeded["rooms"][1].id
+    created = await book(
+        manager_client, guest_id=seeded["guests"][0].id,
+        room_id=room_id, check_in=5, check_out=7,
+    )
+    assert created.status_code == 201
+
+    refused = await manager_client.patch(
+        f"/api/v1/rooms/{room_id}", json={"status": "maintenance"}
+    )
+    assert refused.status_code == 409
+    error = refused.json()["error"]
+    assert created.json()["reference"] in error["details"]["blocked_reservations"]
+
+    # Cancel the stay and the room is free to go out of service.
+    await manager_client.post(
+        f"/api/v1/reservations/{created.json()['id']}/cancel", json={"reason": "rehoused"}
+    )
+    allowed = await manager_client.patch(
+        f"/api/v1/rooms/{room_id}", json={"status": "maintenance"}
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["status"] == "maintenance"
+
+
+async def test_capacity_cannot_shrink_below_a_live_booking(manager_client, seeded):
+    """Capacity is the ceiling every booking is validated against, so shrinking
+    it under one left that booking in violation of a rule it could no longer be
+    edited without tripping."""
+    created = await book(
+        manager_client, guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id, check_in=1, check_out=3, adults=2,
+    )
+    assert created.status_code == 201
+
+    refused = await manager_client.patch(
+        f"/api/v1/room-types/{seeded['double'].id}", json={"capacity": 1}
+    )
+    assert refused.status_code == 409
+    assert refused.json()["error"]["details"]["largest_party"] == 2
+
+    # Growing it is always fine.
+    grown = await manager_client.patch(
+        f"/api/v1/room-types/{seeded['double'].id}", json={"capacity": 4}
+    )
+    assert grown.status_code == 200
+    assert grown.json()["capacity"] == 4
+
+
+async def test_a_room_cannot_move_to_a_type_too_small_for_its_booking(
+    manager_client, seeded
+):
+    """The same shrink, reached sideways through `room_type_id`."""
+    created = await book(
+        manager_client, guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id, check_in=1, check_out=3, adults=2,
+    )
+    assert created.status_code == 201
+
+    refused = await manager_client.patch(
+        f"/api/v1/rooms/{seeded['rooms'][1].id}",
+        json={"room_type_id": seeded["single"].id},  # Single sleeps 1
+    )
+    assert refused.status_code == 409
+    assert refused.json()["error"]["details"]["largest_party"] == 2

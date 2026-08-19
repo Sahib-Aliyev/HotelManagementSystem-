@@ -339,7 +339,7 @@ function roomsPage() {
       }
       try {
         const updated = await api(`/api/v1/rooms/${entry.room.id}/status`, {
-          method: 'POST', params: { new_status: status },
+          method: 'POST', body: { status },
         });
         // Read the status back rather than echoing the request: a room with a
         // guest in it comes back OCCUPIED however it was flagged.

@@ -1,6 +1,6 @@
 """Room and room-type data access, including the availability query."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import joinedload
@@ -144,3 +144,67 @@ class RoomRepository(BaseRepository[Room]):
             )
         )
         return int((await self.db.execute(stmt)).scalar_one())
+
+    async def occupied_per_day(self, start: date, end: date) -> dict[date, int]:
+        """Rooms sold for each night in [start, end], in one round trip.
+
+        The trends and the management report used to call `occupied_on()` once
+        per day, so a 90-day chart was 92 statements and the 366-day report cap
+        was nearly 370. One query fetches every stay overlapping the window and
+        the nights are expanded here, which keeps the SQL portable — no dialect
+        date-truncation or generated series, the same reason `revenue_by_day`
+        groups in Python.
+        """
+        stmt = select(
+            Reservation.room_id,
+            Reservation.check_in_date,
+            Reservation.check_out_date,
+        ).where(
+            Reservation.status.in_(BLOCKING_STATUSES),
+            Reservation.check_in_date <= end,
+            Reservation.check_out_date > start,
+        )
+        rows = (await self.db.execute(stmt)).all()
+
+        # A room counts once per night however many stays touch it, which is
+        # what COUNT(DISTINCT room_id) did per day.
+        per_day: dict[date, set[int]] = {}
+        for room_id, check_in, check_out in rows:
+            night = max(check_in, start)
+            last = min(check_out, end + timedelta(days=1))
+            while night < last:
+                per_day.setdefault(night, set()).add(room_id)
+                night += timedelta(days=1)
+
+        span = (end - start).days + 1
+        return {
+            start + timedelta(days=offset): len(
+                per_day.get(start + timedelta(days=offset), ())
+            )
+            for offset in range(span)
+        }
+
+    async def largest_party_for_type(self, room_type_id: int) -> int:
+        """Biggest party held by a live booking in any room of this type.
+
+        The ceiling a capacity reduction must not go below.
+        """
+        stmt = (
+            select(func.max(Reservation.adults + Reservation.children))
+            .select_from(Reservation)
+            .join(Room, Reservation.room_id == Room.id)
+            .where(
+                Room.room_type_id == room_type_id,
+                Reservation.status.in_(BLOCKING_STATUSES),
+            )
+        )
+        return int((await self.db.execute(stmt)).scalar() or 0)
+
+    async def largest_party_for_room(self, room_id: int) -> int:
+        stmt = select(
+            func.max(Reservation.adults + Reservation.children)
+        ).where(
+            Reservation.room_id == room_id,
+            Reservation.status.in_(BLOCKING_STATUSES),
+        )
+        return int((await self.db.execute(stmt)).scalar() or 0)

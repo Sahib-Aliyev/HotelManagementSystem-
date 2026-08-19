@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import settings
@@ -120,5 +121,16 @@ async def add_security_headers(request: Request, call_next):
 
 @app.get("/health", tags=["System"], include_in_schema=False)
 async def health():
-    # Deliberately says nothing about environment, version or database.
+    """Liveness *and* readiness: a check that cannot fail is not a check.
+
+    It used to return a literal, so an orchestrator kept routing traffic to a
+    container whose database was unreachable. The reply still says nothing about
+    environment, version or the error itself — only whether this instance can
+    serve a request.
+    """
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse({"status": "unavailable"}, status_code=503)
     return JSONResponse({"status": "ok"})

@@ -7,7 +7,7 @@
 import asyncio
 import random
 import sys
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -92,7 +92,7 @@ REQUESTS = [
 
 
 def _utc(day: date, hour: int) -> datetime:
-    return datetime.combine(day, time(hour, RNG.randint(0, 59)), tzinfo=timezone.utc)
+    return datetime.combine(day, time(hour, RNG.randint(0, 59)), tzinfo=UTC)
 
 
 async def seed() -> None:
@@ -385,7 +385,7 @@ async def seed() -> None:
         print(f"Seeded {len(payments)} payments")
         print()
         print("Sign in with:")
-        for name, email, password, role, _phone in STAFF[:3]:
+        for _name, email, password, role, _phone in STAFF[:3]:
             print(f"  {role.value:<13} {email:<28} {password}")
 
 

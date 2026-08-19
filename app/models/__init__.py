@@ -1,7 +1,7 @@
 """Importing this package registers every mapper with the declarative Base."""
 
 from app.models.guest import DocumentType, Guest
-from app.models.invoice import Invoice
+from app.models.invoice import Invoice, InvoiceCounter
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.reservation import (
     BLOCKING_STATUSES,
@@ -16,6 +16,7 @@ __all__ = [
     "DocumentType",
     "Guest",
     "Invoice",
+    "InvoiceCounter",
     "Payment",
     "PaymentMethod",
     "PaymentStatus",

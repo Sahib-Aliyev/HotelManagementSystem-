@@ -1,8 +1,15 @@
-"""Generic async repository."""
+"""Generic async repository.
+
+Deliberately thin. It used to carry `list()`, `count()` and an `update()` that
+filtered `None` against a `_nullable_fields` attribute no model defined — a dead
+branch reimplementing, badly, the rule the services do properly with their own
+`NULLABLE_UPDATE_FIELDS`. Nothing called any of the three. A base class that
+offers a wrong version of a rule stated correctly elsewhere is worse than one
+that offers nothing.
+"""
 
 from typing import Any, Generic, TypeVar
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Base
@@ -38,26 +45,9 @@ class BaseRepository(Generic[ModelT]):
     async def get(self, obj_id: int) -> ModelT | None:
         return await self.db.get(self.model, obj_id)
 
-    async def list(self, *, limit: int = 100, offset: int = 0) -> list[ModelT]:
-        stmt = select(self.model).limit(limit).offset(offset)
-        result = await self.db.execute(stmt)
-        return list(result.unique().scalars())
-
-    async def count(self) -> int:
-        stmt = select(func.count()).select_from(self.model)
-        return int((await self.db.execute(stmt)).scalar_one())
-
     async def create(self, **values: Any) -> ModelT:
         obj = self.model(**values)
         self.db.add(obj)
-        await self.db.flush()
-        await self.db.refresh(obj)
-        return obj
-
-    async def update(self, obj: ModelT, **values: Any) -> ModelT:
-        for field, value in values.items():
-            if value is not None or field in getattr(obj, "_nullable_fields", ()):
-                setattr(obj, field, value)
         await self.db.flush()
         await self.db.refresh(obj)
         return obj

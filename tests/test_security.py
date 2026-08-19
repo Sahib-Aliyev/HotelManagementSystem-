@@ -347,8 +347,12 @@ async def test_the_account_locks_after_repeated_failures(client, monkeypatch):
 
 # ------------------------------------------------------- waiving what is owed
 async def test_a_receptionist_cannot_check_out_with_a_balance(reception_client, seeded):
-    """`allow_outstanding_balance` was a query parameter the lowest role could
-    set, and nothing recorded that the money had been given up."""
+    """Letting a guest leave owing money is manager-only and is recorded.
+
+    It was a query parameter the lowest role could set, with nothing written
+    down about the money given up. It now travels in the body — a query string
+    put a financial decision into every access log along the way.
+    """
     created = await reception_client.post(
         "/api/v1/reservations",
         json=booking(seeded["guests"][0].id, seeded["rooms"][1].id, check_in_date=iso(0)),
@@ -358,7 +362,7 @@ async def test_a_receptionist_cannot_check_out_with_a_balance(reception_client, 
 
     refused = await reception_client.post(
         f"/api/v1/reservations/{reservation_id}/check-out",
-        params={"allow_outstanding_balance": True},
+        json={"allow_outstanding_balance": True},
     )
     assert refused.status_code == 403
 
@@ -368,7 +372,7 @@ async def test_a_receptionist_cannot_check_out_with_a_balance(reception_client, 
     )
     allowed = await reception_client.post(
         f"/api/v1/reservations/{reservation_id}/check-out",
-        params={"allow_outstanding_balance": True},
+        json={"allow_outstanding_balance": True},
     )
     assert allowed.status_code == 200
     body = allowed.json()
@@ -417,3 +421,168 @@ async def test_deleting_a_guest_without_history_works(reception_client):
     deleted = await reception_client.delete(f"/api/v1/guests/{guest_id}")
     assert deleted.status_code == 200
     assert (await reception_client.get(f"/api/v1/guests/{guest_id}")).status_code == 404
+
+
+# ================================================ audit of 2026-08-19
+
+
+async def test_taking_a_room_out_of_service_needs_a_manager_by_either_door(
+    reception_client, seeded
+):
+    """`PATCH /rooms/{id}` was manager-only while `POST /rooms/{id}/status` was
+    open to any staff member, and both reached `MAINTENANCE` — so a receptionist
+    refused by one was admitted by the other. The role belongs to the change,
+    not to the route, so the check lives in the service now.
+    """
+    room_id = seeded["rooms"][0].id
+
+    patched = await reception_client.patch(
+        f"/api/v1/rooms/{room_id}", json={"status": "maintenance"}
+    )
+    posted = await reception_client.post(
+        f"/api/v1/rooms/{room_id}/status", json={"status": "maintenance"}
+    )
+    assert patched.status_code == 403
+    assert posted.status_code == 403, "the second door has to be locked too"
+
+    room = await reception_client.get(f"/api/v1/rooms/{room_id}")
+    assert room.json()["status"] != "maintenance"
+
+
+async def test_housekeeping_is_still_a_receptionists_job(reception_client, seeded):
+    """The other half: cleaning is not a commercial decision, so it stays open."""
+    room_id = seeded["rooms"][0].id
+    flagged = await reception_client.post(
+        f"/api/v1/rooms/{room_id}/status", json={"status": "cleaning"}
+    )
+    assert flagged.status_code == 200
+    assert flagged.json()["status"] == "cleaning"
+
+    cleaned = await reception_client.post(
+        f"/api/v1/rooms/{room_id}/status", json={"status": "available"}
+    )
+    assert cleaned.status_code == 200
+    assert cleaned.json()["status"] == "available"
+
+
+async def test_a_manager_can_take_an_empty_room_out_of_service(manager_client, seeded):
+    out = await manager_client.post(
+        f"/api/v1/rooms/{seeded['rooms'][0].id}/status", json={"status": "maintenance"}
+    )
+    assert out.status_code == 200
+    assert out.json()["status"] == "maintenance"
+
+
+async def test_the_failed_login_store_is_bounded(reception_client):
+    """The key is an address the caller chose, so the store has to be bounded.
+
+    This was two plain dicts that only shed an entry on a successful login, so
+    every distinct address an attacker submitted stayed for the life of the
+    process. The rate limit caps the rate, not the total.
+    """
+    from app.core.ratelimit import FailedLoginTracker
+
+    tracker = FailedLoginTracker(threshold=10, lock_seconds=900, max_accounts=32)
+    for i in range(500):
+        tracker.record_failure(f"nobody{i}@attacker.example")
+
+    assert tracker.tracked <= 32, f"{tracker.tracked} addresses retained"
+
+
+async def test_a_real_lockout_survives_the_eviction(reception_client):
+    """Bounding the store must not throw away a lock that is doing its job."""
+    from app.core.ratelimit import FailedLoginTracker
+
+    tracker = FailedLoginTracker(threshold=2, lock_seconds=900, max_accounts=8)
+    tracker.record_failure("victim@test.az")
+    tracker.record_failure("victim@test.az")
+    assert tracker.is_locked("victim@test.az")
+
+    # Keep touching it, as a real attack on that account would.
+    for i in range(50):
+        tracker.record_failure(f"noise{i}@attacker.example")
+        tracker.record_failure("victim@test.az")
+
+    assert tracker.is_locked("victim@test.az"), "the account under attack stays locked"
+    assert tracker.tracked <= 8
+
+
+# ---------------------------------------------------------- erasing a guest
+async def test_a_guest_with_history_can_be_anonymised(manager_client, seeded, db):
+    """`DELETE` refuses anybody with a reservation, because the relationship
+    cascades to payments and invoices — which left no way at all to honour an
+    erasure request from the guests who actually have data worth erasing.
+    """
+    created = await manager_client.post(
+        "/api/v1/reservations",
+        json=booking(seeded["guests"][0].id, seeded["rooms"][1].id, check_in_date=iso(0)),
+    )
+    reservation_id = created.json()["id"]
+    await manager_client.post(f"/api/v1/reservations/{reservation_id}/check-in")
+    await manager_client.post(
+        f"/api/v1/reservations/{reservation_id}/check-out",
+        json={"allow_outstanding_balance": True},
+    )
+
+    guest_id = seeded["guests"][0].id
+    refused = await manager_client.delete(f"/api/v1/guests/{guest_id}")
+    assert refused.status_code == 409, "deleting would take the money with it"
+
+    erased = await manager_client.post(f"/api/v1/guests/{guest_id}/anonymise")
+    assert erased.status_code == 200
+    body = erased.json()
+    assert body["full_name"] == "[erased guest]"
+    assert body["email"] is None
+    assert body["address"] is None
+    assert body["date_of_birth"] is None
+    assert "P1000001" not in body["document_number"]
+
+    # The ledger is untouched: the stay and its money still exist.
+    stays = await manager_client.get(f"/api/v1/guests/{guest_id}/reservations")
+    assert len(stays.json()) == 1
+    assert stays.json()[0]["id"] == reservation_id
+
+
+async def test_a_guest_in_the_hotel_cannot_be_anonymised(manager_client, seeded):
+    """Erasing an occupant would leave the front desk unable to say who is in
+    the room."""
+    created = await manager_client.post(
+        "/api/v1/reservations",
+        json=booking(seeded["guests"][0].id, seeded["rooms"][1].id, check_in_date=iso(0)),
+    )
+    await manager_client.post(f"/api/v1/reservations/{created.json()['id']}/check-in")
+
+    refused = await manager_client.post(
+        f"/api/v1/guests/{seeded['guests'][0].id}/anonymise"
+    )
+    assert refused.status_code == 409
+    assert "checked in" in refused.json()["error"]["message"]
+
+
+async def test_anonymising_is_manager_only_and_happens_once(reception_client, seeded):
+    # One client, signed in twice: `reception_client` and `manager_client` wrap
+    # the same AsyncClient, so requesting both fixtures would leave whichever
+    # logged in last holding the cookie.
+    guest_id = seeded["guests"][1].id
+    assert (
+        await reception_client.post(f"/api/v1/guests/{guest_id}/anonymise")
+    ).status_code == 403
+
+    await reception_client.post(
+        "/api/v1/auth/login",
+        json={"email": "manager@test.az", "password": "Manager1234"},
+    )
+    assert (
+        await reception_client.post(f"/api/v1/guests/{guest_id}/anonymise")
+    ).status_code == 200
+    again = await reception_client.post(f"/api/v1/guests/{guest_id}/anonymise")
+    assert again.status_code == 409, "already erased"
+
+
+# --------------------------------------------------------------- health check
+async def test_health_reports_whether_the_database_answers(client):
+    """A check that cannot fail is not a check: this returned a literal, so an
+    orchestrator kept routing traffic to a container with no database."""
+    ok = await client.get("/health")
+    assert ok.status_code == 200
+    assert ok.json() == {"status": "ok"}

@@ -12,6 +12,7 @@ from app.schemas.room import (
     RoomAvailabilityQuery,
     RoomCreate,
     RoomRead,
+    RoomStatusUpdate,
     RoomTypeCreate,
     RoomTypeRead,
     RoomTypeUpdate,
@@ -76,17 +77,24 @@ async def get_room(room_id: int, db: DbSession, _user: StaffUser):
 
 @router.patch("/{room_id}", response_model=RoomRead)
 async def update_room(
-    room_id: int, payload: RoomUpdate, db: DbSession, _manager: ManagerUser
+    room_id: int, payload: RoomUpdate, db: DbSession, manager: ManagerUser
 ):
-    return await RoomService(db).update_room(room_id, payload)
+    return await RoomService(db).update_room(room_id, payload, acting_user=manager)
 
 
 @router.post("/{room_id}/status", response_model=RoomRead)
 async def set_room_status(
-    room_id: int, new_status: RoomStatus, db: DbSession, _user: StaffUser
+    room_id: int, payload: RoomStatusUpdate, db: DbSession, user: StaffUser
 ):
-    """Housekeeping can flip a room between available / cleaning / maintenance."""
-    return await RoomService(db).set_status(room_id, new_status)
+    """Housekeeping status.
+
+    Any staff member may flag a room for cleaning or mark it clean; taking a
+    room out of service removes it from sale and needs a manager. That split is
+    enforced in `RoomService`, not here — `PATCH /rooms/{id}` reaches the same
+    state, and when the two routes each carried their own role a receptionist
+    refused by one was admitted by the other.
+    """
+    return await RoomService(db).set_status(room_id, payload.status, acting_user=user)
 
 
 @router.delete("/{room_id}", response_model=Message)

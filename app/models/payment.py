@@ -12,8 +12,10 @@ from sqlalchemy import (
     DateTime,
     Enum as SAEnum,
     ForeignKey,
+    Index,
     Numeric,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,7 +41,18 @@ class PaymentStatus(str, enum.Enum):
 
 class Payment(Base, TimestampMixin):
     __tablename__ = "payments"
-    __table_args__ = (CheckConstraint("amount > 0", name="ck_payment_amount"),)
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_payment_amount"),
+        # A receipt number describes one movement of money, so it cannot appear
+        # twice against the same stay. The service checks first for a readable
+        # message; this is what holds under a concurrent double submit.
+        UniqueConstraint(
+            "reservation_id", "reference", name="uq_payment_reservation_reference"
+        ),
+        # Every revenue figure range-filters on paid_at, so without this each
+        # dashboard load scanned the whole table.
+        Index("ix_payments_paid_at", "paid_at"),
+    )
 
     reservation_id: Mapped[int] = mapped_column(
         ForeignKey("reservations.id", ondelete="CASCADE"), nullable=False, index=True
@@ -67,7 +80,7 @@ class Payment(Base, TimestampMixin):
     )
 
     reservation: Mapped[Reservation] = relationship(back_populates="payments")
-    refunded_payment: Mapped["Payment | None"] = relationship(
+    refunded_payment: Mapped[Payment | None] = relationship(
         remote_side="Payment.id", foreign_keys=[refunded_payment_id]
     )
 

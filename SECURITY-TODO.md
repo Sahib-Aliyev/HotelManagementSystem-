@@ -13,6 +13,14 @@ traversal, SSRF, error-handler leakage, cookie flags, the overlap/overbooking
 logic, `Decimal` money precision, and PII scoping in `GuestSummary`. Those need
 no work; do not re-audit them without a reason.
 
+The **audit of 2026-08-19** then found five more — the two-doors-one-lock
+authorisation split on room status, `TRUSTED_HOSTS` missing from the boot check,
+the unbounded failed-login store, missing payment idempotency and the absent
+erasure path — plus three smaller items. All are closed; the details are in
+CLAUDE.md. That audit asked what *states* the application can be driven into
+rather than walking code paths, which is why it reached things two security
+reviews had not.
+
 When an item is finished, delete it from here and move it into the "Fixed bugs"
 section of CLAUDE.md, and add the regression test that keeps it fixed.
 
@@ -30,13 +38,16 @@ silently, so walk the list by hand.
       every existing session.
 - [ ] **Set `CORS_ORIGINS` to the real domain.** `*` is rejected at boot because
       the cookie is credentialed, but a wrong domain is not.
-- [ ] **Set `TRUSTED_HOSTS` to the real hostnames.** The default is `*`, which
-      disables the Host header check entirely.
+- [x] **Set `TRUSTED_HOSTS` to the real hostnames.** Production now *refuses to
+      boot* on the default `*`, which disabled the Host header check entirely, so
+      this is no longer something to remember — `docker-compose.yml` sets real
+      hostnames and `_refuse_unsafe_production` enforces it.
 - [ ] **Serve over HTTPS.** The session cookie only gets its `secure` flag and
       the HSTS header when `APP_ENV=production`; over plain HTTP the cookie
       travels in the clear.
-- [ ] **Forward the real client IP if there is a proxy in front.** Run uvicorn
-      with `--proxy-headers --forwarded-allow-ips=<proxy-ip>`. Without this the
+- [ ] **Forward the real client IP if there is a proxy in front.** `compose`
+      already passes `--proxy-headers`; add
+      `--forwarded-allow-ips=<proxy-ip>` for the actual proxy. Without this the
       rate limiter sees **every user as one IP**, which both makes the
       brute-force protection useless and lets one person's typo lock out the
       whole hotel.
@@ -46,6 +57,8 @@ silently, so walk the list by hand.
       per-account lockout (`ACCOUNT_LOCK_AFTER_FAILURES`) counts in-process for
       the same reason and has the same caveat — see section 3.
 - [ ] **Run `alembic upgrade head`.** `create_all` only runs in development.
+- [ ] **Set `POSTGRES_PASSWORD`.** `docker-compose.yml` demands it rather than
+      shipping `hotel`/`hotel`, and no longer publishes 5432 to the host.
 - [ ] **Never run `seed.py` against the production database.** It contains
       fixed demo passwords (`Admin1234`, `Manager1234`, `Reception1234`), and
       because it writes to the model directly it bypasses the new password
@@ -91,11 +104,12 @@ Both controls now exist and both count in one process:
   `RATE_LIMIT_STORAGE_URI`, which defaults to `memory://`. Setting it to
   `redis://…` is all that is needed — `slowapi` handles the rest.
 - The per-account lockout (`FailedLoginTracker`, ten consecutive failures then
-  fifteen minutes) keeps its counters in a plain dict, so a second instance
-  keeps its own. Moving it to the same Redis is the matching change, and it has
-  to keep answering a locked address exactly as it answers a wrong password —
-  otherwise it becomes the account-enumeration oracle that the identical login
-  message exists to prevent.
+  fifteen minutes) counts in-process, so a second instance keeps its own count.
+  Moving it to the same Redis is the matching change, and it has to keep
+  answering a locked address exactly as it answers a wrong password — otherwise
+  it becomes the account-enumeration oracle that the identical login message
+  exists to prevent. Note the store is **bounded and expiring** since the
+  2026-08-19 audit: the growth problem is fixed, the sharing problem is not.
 
 Neither is a live exploit on a single instance, which is why this ranks below
 section 2.
@@ -121,5 +135,8 @@ section 2.
 - **Replace `passlib`.** `passlib` 1.7.4 is no longer actively maintained, and
   it is the reason `bcrypt` is pinned to 4.0.1 (it breaks with 4.1+).
   Alternatives: the `bcrypt` library directly, or `argon2-cffi`.
-- **Dependency scanning in CI.** `pip-audit` or Dependabot — the `python-jose`
-  CVEs sat there until the audit, and could have been caught automatically.
+- ~~**Dependency scanning in CI.**~~ Done: `.github/workflows/ci.yml` runs
+  `pip-audit` on every push, advisory rather than blocking so a new CVE in a
+  pinned dependency is visible without failing an unrelated change. Consider
+  Dependabot on top, and a lock file with hashes (`uv` or `pip-tools`) —
+  `requirements.txt` pins direct dependencies but not transitive ones.

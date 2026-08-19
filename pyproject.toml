@@ -1,0 +1,42 @@
+# Tooling configuration only. Dependencies stay in requirements.txt.
+#
+# The project had no linter, no formatter and no type checker in the loop, so
+# nothing enforced the conventions CLAUDE.md documents. `ruff` covers lint and
+# format in one tool and runs in CI.
+
+[tool.ruff]
+target-version = "py312"
+line-length = 90
+extend-exclude = ["alembic/versions", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes — unused imports and names, which is how dead code accumulated
+    "I",    # import sorting
+    "B",    # bugbear
+    "UP",   # pyupgrade
+    "C4",   # comprehensions
+    "SIM",  # simplify
+    "RUF",
+]
+ignore = [
+    "E501",    # line length is checked by the formatter, which knows about strings
+    "B008",    # FastAPI's Depends()/Query() in defaults is the idiom, not a bug
+    "RUF001",  # the UI text uses en dashes and · deliberately
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.isort]
+# Keep `from sqlalchemy import Date, Enum as SAEnum, String` on one line, which
+# is the style the models were already written in.
+combine-as-imports = true
+
+[tool.ruff.lint.per-file-ignores]
+# Tests reach into internals on purpose, and import inside a test body to keep
+# each regression self-contained.
+"tests/*" = ["E402", "PLC0415"]
+
+[tool.ruff.format]
+quote-style = "double"

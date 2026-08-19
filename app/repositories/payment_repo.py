@@ -1,19 +1,20 @@
 """Payment and invoice data access."""
 
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 
-from app.models.invoice import Invoice
+from app.models.invoice import Invoice, InvoiceCounter
 from app.models.payment import Payment, PaymentStatus
 from app.repositories.base import BaseRepository
 
 
 def _day_bounds(day: date) -> tuple[datetime, datetime]:
     """UTC datetime range covering a calendar day."""
-    start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    end = datetime.combine(day, time.max, tzinfo=timezone.utc)
+    start = datetime.combine(day, time.min, tzinfo=UTC)
+    end = datetime.combine(day, time.max, tzinfo=UTC)
     return start, end
 
 
@@ -57,6 +58,16 @@ class PaymentRepository(BaseRepository[Payment]):
     async def get_refund_for(self, payment_id: int) -> Payment | None:
         """The counter-entry reversing a payment, if it has already been refunded."""
         stmt = select(Payment).where(Payment.refunded_payment_id == payment_id)
+        return (await self.db.execute(stmt)).scalars().first()
+
+    async def get_by_reference(
+        self, reservation_id: int, reference: str
+    ) -> Payment | None:
+        """An existing movement of money carrying this receipt number."""
+        stmt = select(Payment).where(
+            Payment.reservation_id == reservation_id,
+            Payment.reference == reference.strip(),
+        )
         return (await self.db.execute(stmt)).scalars().first()
 
     async def revenue_between(self, start: date, end: date) -> Decimal:
@@ -116,6 +127,38 @@ class InvoiceRepository(BaseRepository[Invoice]):
         stmt = select(Invoice).where(Invoice.invoice_number == invoice_number.upper())
         return (await self.db.execute(stmt)).unique().scalars().first()
 
-    async def next_sequence(self) -> int:
-        stmt = select(func.count()).select_from(Invoice)
-        return int((await self.db.execute(stmt)).scalar_one()) + 1
+    async def next_sequence(self, year: int) -> int:
+        """Allocate the next invoice number for a year, atomically.
+
+        This was `SELECT COUNT(*) + 1`, and a count is not a sequence. It goes
+        backwards when a row is deleted — and `Invoice.reservation_id` cascades,
+        so removing a reservation silently freed its number for reuse, which
+        handed the same identity to two different tax documents. Two invoices
+        issued concurrently also read the same count and collided on the unique
+        index, surfacing as a 500.
+
+        A counter row per year, incremented with `UPDATE … RETURNING`, is
+        monotonic and safe under concurrency: the write locks the row, so the
+        second caller waits and then reads the incremented value. Numbers are
+        never reused, and a gap (an allocation whose transaction rolled back) is
+        expected and harmless — a sequence guarantees uniqueness and order, not
+        the absence of gaps.
+        """
+        stmt = (
+            update(InvoiceCounter)
+            .where(InvoiceCounter.year == year)
+            .values(last_number=InvoiceCounter.last_number + 1)
+            .returning(InvoiceCounter.last_number)
+        )
+        allocated = (await self.db.execute(stmt)).scalar_one_or_none()
+        if allocated is None:
+            # First invoice of this year. A unique constraint on `year` makes the
+            # race here safe: the loser's INSERT fails and it retries the UPDATE.
+            try:
+                self.db.add(InvoiceCounter(year=year, last_number=1))
+                await self.db.flush()
+                return 1
+            except IntegrityError:
+                await self.db.rollback()
+                allocated = (await self.db.execute(stmt)).scalar_one()
+        return int(allocated)

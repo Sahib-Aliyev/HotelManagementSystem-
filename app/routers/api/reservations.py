@@ -10,6 +10,7 @@ from app.schemas.common import Page
 from app.schemas.reservation import (
     QuickBookingCreate,
     ReservationCancel,
+    ReservationCheckOut,
     ReservationCreate,
     ReservationRead,
     ReservationUpdate,
@@ -133,13 +134,13 @@ async def check_out(
     reservation_id: int,
     db: DbSession,
     user: StaffUser,
-    allow_outstanding_balance: bool = Query(
-        False, description="Manager only. Writes the balance off and records who did.",
-    ),
+    payload: ReservationCheckOut | None = None,
 ):
+    """Check a guest out. Writing off an outstanding balance is manager-only and
+    is recorded — the role check lives in the service, which knows the balance."""
     return await ReservationService(db).check_out(
         reservation_id,
-        allow_outstanding_balance=allow_outstanding_balance,
+        allow_outstanding_balance=bool(payload and payload.allow_outstanding_balance),
         acting_user=user,
     )
 

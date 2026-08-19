@@ -13,10 +13,10 @@ from app.core.exceptions import (
 from app.core.ratelimit import failed_logins
 from app.core.security import (
     create_access_token,
-    hash_password,
+    hash_password_async,
     password_fingerprint,
-    verify_password,
-    waste_password_time,
+    verify_password_async,
+    waste_password_time_async,
 )
 from app.models.user import User, UserRole
 from app.repositories.user_repo import UserRepository
@@ -34,7 +34,7 @@ class AuthService:
         # same bcrypt round, so the lockout cannot be used to discover which
         # addresses are registered.
         if failed_logins.is_locked(key):
-            waste_password_time()
+            await waste_password_time_async()
             raise AuthenticationError("Incorrect email or password.")
 
         user = await self.users.get_by_email(email)
@@ -43,10 +43,10 @@ class AuthService:
         # for one bcrypt round, otherwise its faster reply leaks the same fact
         # the shared message is hiding.
         if user is None:
-            waste_password_time()
+            await waste_password_time_async()
             failed_logins.record_failure(key)
             raise AuthenticationError("Incorrect email or password.")
-        if not verify_password(password, user.hashed_password):
+        if not await verify_password_async(password, user.hashed_password):
             failed_logins.record_failure(key)
             raise AuthenticationError("Incorrect email or password.")
         if not user.is_active:
@@ -81,7 +81,7 @@ class AuthService:
         user = await self.users.create(
             full_name=payload.full_name.strip(),
             email=email,
-            hashed_password=hash_password(payload.password),
+            hashed_password=await hash_password_async(payload.password),
             role=payload.role,
             phone=payload.phone,
         )
@@ -92,12 +92,8 @@ class AuthService:
         """Block changes that would leave the system with no way to administer it."""
         if user.role != UserRole.ADMIN or not user.is_active:
             return
-        other_admins = [
-            u
-            for u in await self.users.list_all()
-            if u.role == UserRole.ADMIN and u.is_active and u.id != user.id
-        ]
-        if not other_admins:
+        remaining = await self.users.count_active_admins(exclude_id=user.id)
+        if remaining == 0:
             raise ConflictError(f"The last active administrator cannot be {action}.")
 
     async def update_user(
@@ -140,13 +136,13 @@ class AuthService:
     async def change_password(
         self, user: User, current_password: str, new_password: str
     ) -> None:
-        if not verify_password(current_password, user.hashed_password):
+        if not await verify_password_async(current_password, user.hashed_password):
             raise AuthenticationError("Current password is incorrect.")
-        if verify_password(new_password, user.hashed_password):
+        if await verify_password_async(new_password, user.hashed_password):
             raise ValidationError("The new password must differ from the current one.")
         # Changing the hash changes the token fingerprint, so every session
         # issued under the old password stops working on its next request.
-        user.hashed_password = hash_password(new_password)
+        user.hashed_password = await hash_password_async(new_password)
         await self.db.commit()
 
     async def revoke_sessions(self, user: User) -> None:
@@ -166,14 +162,12 @@ class AuthService:
         user = await self.users.get(user_id)
         if user is None:
             raise NotFoundError("Staff member not found.")
-        if user.role == UserRole.ADMIN:
-            admins = [
-                u
-                for u in await self.users.list_all()
-                if u.role == UserRole.ADMIN and u.is_active
-            ]
-            if len(admins) <= 1:
-                raise ConflictError("The last active administrator cannot be removed.")
+        if (
+            user.role == UserRole.ADMIN
+            and user.is_active
+            and await self.users.count_active_admins(exclude_id=user.id) == 0
+        ):
+            raise ConflictError("The last active administrator cannot be removed.")
         user.is_active = False
         await self.db.commit()
         await self.db.refresh(user)

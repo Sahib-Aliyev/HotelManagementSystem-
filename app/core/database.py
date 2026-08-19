@@ -1,7 +1,7 @@
 """Async SQLAlchemy engine, session factory and declarative base."""
 
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Integer, event
 from sqlalchemy.ext.asyncio import (
@@ -16,7 +16,7 @@ from app.core.config import settings
 
 def utcnow() -> datetime:
     """Timezone-aware UTC timestamp (datetime.utcnow() is deprecated)."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):

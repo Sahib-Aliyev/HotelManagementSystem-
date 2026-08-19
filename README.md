@@ -185,15 +185,18 @@ POST   /api/v1/reservations                      book (409 on any clash)
 POST   /api/v1/reservations/walk-in              register guest + book at once
 GET    /api/v1/reservations/front-desk           today's arrivals/departures/in-house
 POST   /api/v1/reservations/{id}/check-in
-POST   /api/v1/reservations/{id}/check-out       ?allow_outstanding_balance=true (manager+, recorded)
+POST   /api/v1/reservations/{id}/check-out       body {allow_outstanding_balance} (manager+, recorded)
 POST   /api/v1/reservations/{id}/cancel          manager+ once the guest is checked in
 POST   /api/v1/reservations/{id}/no-show         manager+; resolves a booking nobody arrived for
 POST   /api/v1/payments                          take money
-POST   /api/v1/payments/{id}/refund              manager+; writes a counter-entry, never edits the original
+POST   /api/v1/payments/{id}/refund              manager+; body {note}. Writes a counter-entry, never edits the original
 GET    /api/v1/payments/folio/{id}               itemised bill
 POST   /api/v1/invoices/reservation/{id}         issue the invoice (this is the write)
 GET    /api/v1/invoices/reservation/{id}/pdf     render an issued invoice (404 if none — a GET never writes)
+POST   /api/v1/rooms/{id}/status                 body {status}. Maintenance is manager+
+POST   /api/v1/guests/{id}/anonymise             manager+; erases personal data, keeps the ledger
 GET    /api/v1/reports/summary                   ?start=&end=  (manager+)
+GET    /health                                   liveness + a real database check
 ```
 
 Errors are uniform, so the frontend renders them without special cases:
@@ -212,7 +215,12 @@ Errors are uniform, so the frontend renders them without special cases:
 python -m pytest
 ```
 
-98 tests: authentication and role boundaries, every overlap shape, capacity and
+Continuous integration runs the same suite plus `ruff check`, `alembic check`
+(the models and the migrations must agree), a migration downgrade/upgrade round
+trip, and a PostgreSQL job for the one test that needs a real exclusion
+constraint — see `.github/workflows/ci.yml`.
+
+134 tests: authentication and role boundaries, every overlap shape, capacity and
 date validation, the full check-in → pay → check-out lifecycle, VAT and balance
 arithmetic, invoice idempotency, guest document rules. Each test runs against a
 fresh in-memory SQLite database. The suite takes a few minutes — bcrypt is

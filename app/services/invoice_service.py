@@ -17,6 +17,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError
@@ -51,8 +52,9 @@ class InvoiceService:
         self.payments = PaymentService(db)
 
     async def _next_number(self) -> str:
-        seq = await self.invoices.next_sequence()
-        return f"INV-{date.today().year}-{seq:05d}"
+        year = date.today().year
+        seq = await self.invoices.next_sequence(year)
+        return f"INV-{year}-{seq:05d}"
 
     async def issue(self, reservation_id: int) -> Invoice:
         reservation = await self.reservations.get_full(reservation_id)
@@ -220,6 +222,10 @@ class InvoiceService:
             )
         ]
 
-        doc.build(story)
+        # Laying out a PDF is unbounded CPU with no await in it, so on the event
+        # loop it stops every other request for as long as it takes — a trivial
+        # denial of service for any authenticated user. A thread is the floor;
+        # a worker queue is the eventual answer (see BUGS-TODO.md).
+        await run_in_threadpool(doc.build, story)
         filename = f"{invoice.invoice_number}.pdf"
         return buffer.getvalue(), filename

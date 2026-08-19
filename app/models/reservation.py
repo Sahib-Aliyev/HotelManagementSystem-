@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Enum as SAEnum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -52,6 +53,16 @@ class Reservation(Base, TimestampMixin):
     __table_args__ = (
         CheckConstraint("check_out_date > check_in_date", name="ck_reservation_dates"),
         CheckConstraint("adults >= 1", name="ck_reservation_adults"),
+        # The overlap check filters room, status and both dates together. Three
+        # separate single-column indexes made the planner combine them; one
+        # composite serves `is_available` and `occupied_per_day` directly.
+        Index(
+            "ix_reservation_room_stay",
+            "room_id",
+            "status",
+            "check_in_date",
+            "check_out_date",
+        ),
     )
 
     reference: Mapped[str] = mapped_column(

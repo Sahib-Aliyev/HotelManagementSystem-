@@ -1,0 +1,132 @@
+name: CI
+
+# The project's conventions require a test for every new business rule and a
+# migration that matches the models. Nothing enforced either, so 102 tests
+# passed only when somebody remembered to run them, and three `ON DELETE SET
+# NULL` clauses drifted out of the migrations unnoticed — production and
+# development ended up with different foreign keys. `alembic check` below is
+# what would have caught that the day it appeared.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff==0.8.4 pip-audit==2.7.3
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Tests
+        run: pytest -q
+
+      - name: Migrations match the models
+        # A fresh database migrated to head must be exactly what the models
+        # describe. Fails on any schema drift.
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./ci.db
+        run: |
+          alembic upgrade head
+          alembic check
+
+      - name: Migrations reverse cleanly
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./ci.db
+        run: |
+          alembic downgrade -1
+          alembic upgrade head
+          alembic check
+
+      - name: Production refuses to boot on unsafe settings
+        # The same guard `config.py::_refuse_unsafe_production` applies, asserted
+        # from the outside: a wildcard host list must stop the app starting.
+        run: |
+          python - <<'PY'
+          from app.core.config import Settings
+          safe = dict(
+              APP_ENV="production", DEBUG=False, SECRET_KEY="x" * 40,
+              CORS_ORIGINS="https://hotel.example", TRUSTED_HOSTS="hotel.example",
+          )
+          Settings(**safe)
+          for bad in ({"TRUSTED_HOSTS": "*"}, {"CORS_ORIGINS": "*"}, {"DEBUG": True}):
+              try:
+                  Settings(**{**safe, **bad})
+              except ValueError:
+                  continue
+              raise SystemExit(f"production started with {bad}")
+          print("production boot guard holds")
+          PY
+
+  postgres:
+    # The double-booking exclusion constraint only exists on PostgreSQL, so the
+    # one test that proves the race is closed cannot run on SQLite.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hotel
+          POSTGRES_PASSWORD: hotel
+          POSTGRES_DB: hotel_db
+        options: >-
+          --health-cmd "pg_isready -U hotel -d hotel_db"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+        ports: ["5432:5432"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Migrate and check for drift on PostgreSQL
+        env:
+          DATABASE_URL: postgresql+asyncpg://hotel:hotel@localhost:5432/hotel_db
+        run: |
+          alembic upgrade head
+          alembic check
+
+      - name: The database itself refuses a double booking
+        env:
+          DATABASE_URL: postgresql+asyncpg://hotel:hotel@localhost:5432/hotel_db
+        run: pytest -q tests/test_double_booking_pg.py
+
+  audit:
+    runs-on: ubuntu-latest
+    # Advisory: a new CVE in a pinned dependency should be visible without
+    # blocking an unrelated change. The python-jose CVEs sat unnoticed until an
+    # audit found them.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit==2.7.3
+      - run: pip-audit -r requirements.txt

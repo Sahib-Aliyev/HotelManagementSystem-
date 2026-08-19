@@ -68,6 +68,18 @@ class ReservationUpdate(BaseModel):
         return self
 
 
+class ReservationCheckOut(BaseModel):
+    """Body of `POST /reservations/{id}/check-out`.
+
+    Letting a guest leave owing money is a manager's commercial decision and is
+    recorded against the reservation, so it is asked for in the request body
+    rather than in the URL where a query parameter put it into every access log.
+    """
+
+    #: Manager only. Writes the balance off and records who did.
+    allow_outstanding_balance: bool = False
+
+
 class ReservationCancel(BaseModel):
     reason: str | None = Field(None, max_length=255)
     #: Cancelling an in-house stay with money still owed writes the debt off,

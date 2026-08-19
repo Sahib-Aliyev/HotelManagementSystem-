@@ -18,6 +18,17 @@ class PaymentCreate(BaseModel):
     note: str | None = Field(None, max_length=255)
 
 
+class RefundRequest(BaseModel):
+    """Body of `POST /payments/{id}/refund`.
+
+    The reason a manager gives for reversing a payment is part of the financial
+    record, so it belongs in the request body — as a query parameter it was
+    copied into every access log and proxy history en route.
+    """
+
+    note: str | None = Field(None, max_length=255)
+
+
 class PaymentRead(ORMModel):
     id: int
     reservation_id: int

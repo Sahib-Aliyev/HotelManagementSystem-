@@ -88,3 +88,13 @@ class AvailableRoom(ORMModel):
     room_type: RoomTypeRead
     nights: int = 0
     total_price: Decimal = Decimal("0.00")
+
+
+class RoomStatusUpdate(BaseModel):
+    """Body of `POST /rooms/{id}/status`.
+
+    A body rather than a query parameter, so the change is described in the
+    request rather than in the URL and every access log along the way.
+    """
+
+    status: RoomStatus

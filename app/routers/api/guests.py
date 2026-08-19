@@ -54,3 +54,14 @@ async def guest_history(guest_id: int, db: DbSession, _user: StaffUser):
 async def delete_guest(guest_id: int, db: DbSession, _manager: ManagerUser):
     await GuestService(db).delete(guest_id)
     return Message(message="Guest deleted.")
+
+
+@router.post("/{guest_id}/anonymise", response_model=GuestRead)
+async def anonymise_guest(guest_id: int, db: DbSession, _manager: ManagerUser):
+    """Erase a guest's personal data, keeping their stays, payments and invoices.
+
+    What to use when a guest asks to be forgotten but has history: `DELETE`
+    refuses them, because the relationship cascades to the financial record.
+    Irreversible.
+    """
+    return await GuestService(db).anonymise(guest_id)

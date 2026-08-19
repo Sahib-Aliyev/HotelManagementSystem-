@@ -230,3 +230,136 @@ async def test_a_pending_payment_cannot_exceed_the_balance_either(
         },
     )
     assert absurd.status_code == 422
+
+
+# ================================================ audit of 2026-08-19
+
+
+async def test_a_receipt_number_cannot_be_recorded_twice(manager_client, seeded):
+    """A double-click, a client retry or an impatient receptionist used to book
+    the guest's money twice; only the overpayment ceiling limited how far."""
+    stay = await _book_and_check_in(
+        manager_client, guest_id=seeded["guests"][0].id, room_id=seeded["rooms"][1].id
+    )
+    body = {
+        "reservation_id": stay["id"],
+        "amount": "100.00",
+        "method": "cash",
+        "reference": "RCPT-0001",
+    }
+    first = await manager_client.post("/api/v1/payments", json=body)
+    assert first.status_code == 201
+
+    second = await manager_client.post("/api/v1/payments", json=body)
+    assert second.status_code == 409
+    assert second.json()["error"]["details"]["existing_payment_id"] == first.json()["id"]
+
+    rows = await manager_client.get(f"/api/v1/payments/reservation/{stay['id']}")
+    assert len(rows.json()) == 1, "one receipt number, one row"
+
+    # A different reference for a genuinely separate payment is still fine.
+    other = await manager_client.post(
+        "/api/v1/payments", json={**body, "reference": "RCPT-0002"}
+    )
+    assert other.status_code == 201
+
+
+async def test_a_payment_without_a_reference_is_not_deduplicated(
+    manager_client, seeded
+):
+    """Only a receipt number identifies a movement of money. Two cash payments
+    of the same amount with no reference are a normal thing to record."""
+    stay = await _book_and_check_in(
+        manager_client, guest_id=seeded["guests"][0].id, room_id=seeded["rooms"][1].id
+    )
+    body = {"reservation_id": stay["id"], "amount": "50.00", "method": "cash"}
+    assert (await manager_client.post("/api/v1/payments", json=body)).status_code == 201
+    assert (await manager_client.post("/api/v1/payments", json=body)).status_code == 201
+
+
+async def test_refunding_does_not_collide_with_the_original_receipt(
+    manager_client, seeded
+):
+    """The counter-entry must not reuse the settled row's reference, or the
+    duplicate guard would refuse to write it."""
+    stay = await _book_and_check_in(
+        manager_client, guest_id=seeded["guests"][0].id, room_id=seeded["rooms"][1].id
+    )
+    paid = await manager_client.post(
+        "/api/v1/payments",
+        json={
+            "reservation_id": stay["id"],
+            "amount": "100.00",
+            "method": "card",
+            "reference": "RCPT-9",
+        },
+    )
+    refunded = await manager_client.post(
+        f"/api/v1/payments/{paid.json()['id']}/refund",
+        json={"note": "guest disputed the charge"},
+    )
+    assert refunded.status_code == 200
+    assert refunded.json()["reference"] == "REFUND-RCPT-9"
+    assert refunded.json()["note"] == "guest disputed the charge"
+    assert refunded.json()["refunded_payment_id"] == paid.json()["id"]
+
+
+async def test_invoice_numbers_are_never_handed_out_twice(manager_client, seeded, db):
+    """Numbering came from `SELECT COUNT(*) + 1`, which went backwards the
+    moment an invoice was deleted — and `Invoice.reservation_id` cascades."""
+    from app.models import Invoice
+
+    numbers = []
+    for index, room in enumerate(seeded["rooms"][:2]):
+        stay = await _book_and_check_in(
+            manager_client, guest_id=seeded["guests"][index].id, room_id=room.id
+        )
+        issued = await manager_client.post(f"/api/v1/invoices/reservation/{stay['id']}")
+        assert issued.status_code == 201
+        numbers.append(issued.json())
+
+    assert numbers[0]["invoice_number"].endswith("-00001")
+    assert numbers[1]["invoice_number"].endswith("-00002")
+
+    # Delete the second, exactly as a cascade from a removed reservation would.
+    await db.delete(await db.get(Invoice, numbers[1]["id"]))
+    await db.commit()
+
+    stay = await _book_and_check_in(
+        manager_client, guest_id=seeded["guests"][0].id, room_id=seeded["rooms"][2].id
+    )
+    third = await manager_client.post(f"/api/v1/invoices/reservation/{stay['id']}")
+    assert third.status_code == 201
+    assert third.json()["invoice_number"].endswith("-00003"), (
+        "a deleted invoice must not free its number for reuse"
+    )
+    assert third.json()["invoice_number"] not in [n["invoice_number"] for n in numbers]
+
+
+async def test_issuing_an_invoice_twice_returns_the_same_one(manager_client, seeded):
+    """Idempotent, and therefore must not burn a second number."""
+    stay = await _book_and_check_in(
+        manager_client, guest_id=seeded["guests"][0].id, room_id=seeded["rooms"][1].id
+    )
+    first = await manager_client.post(f"/api/v1/invoices/reservation/{stay['id']}")
+    second = await manager_client.post(f"/api/v1/invoices/reservation/{stay['id']}")
+    assert first.json()["invoice_number"] == second.json()["invoice_number"]
+
+
+async def test_the_folio_derives_every_figure_from_one_source(manager_client, seeded):
+    """`subtotal` used to be recomputed as `rate × nights` while `total` came
+    from the stored charge, so `tax = total − subtotal` absorbed any difference
+    between two independent sources for one bill."""
+    stay = await _book_and_check_in(
+        manager_client, guest_id=seeded["guests"][0].id, room_id=seeded["rooms"][1].id
+    )
+    folio = (await manager_client.get(f"/api/v1/payments/folio/{stay['id']}")).json()
+
+    subtotal = Decimal(folio["subtotal"])
+    tax = Decimal(folio["tax_amount"])
+    total = Decimal(folio["total"])
+
+    assert subtotal == Decimal(stay["total_price"]), "the stored charge, not a recount"
+    assert subtotal + tax == total
+    assert tax == (subtotal * Decimal("0.18")).quantize(Decimal("0.01"))
+    assert Decimal(folio["lines"][0]["amount"]) == subtotal

@@ -8,6 +8,7 @@ import secrets
 from datetime import date
 from decimal import Decimal
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import utcnow
@@ -20,7 +21,6 @@ from app.core.exceptions import (
 from app.models.reservation import Reservation, ReservationStatus
 from app.models.room import RoomStatus
 from app.models.user import User, UserRole
-from app.services.pricing import total_due
 from app.repositories.guest_repo import GuestRepository
 from app.repositories.reservation_repo import ReservationRepository
 from app.repositories.room_repo import RoomRepository
@@ -29,13 +29,10 @@ from app.schemas.reservation import (
     ReservationUpdate,
     stay_range_error,
 )
+from app.services.pricing import accommodation_charge, total_due
 
 #: Statuses from which a booking may still be edited.
 EDITABLE_STATUSES = (ReservationStatus.PENDING, ReservationStatus.CONFIRMED)
-
-#: Ceiling of Numeric(10, 2). Postgres raises on overflow and SQLite silently
-#: keeps the oversized value, so the price is checked before it is stored.
-MAX_TOTAL_PRICE = Decimal("99999999.99")
 
 #: PATCH fields that may legitimately be set back to null. Every other field
 #: typed `X | None` is optional-on-input, not nullable — an explicit JSON null
@@ -59,16 +56,6 @@ class ReservationService:
             if await self.reservations.get_by_reference(candidate) is None:
                 return candidate
         raise ConflictError("Could not allocate a booking reference. Please retry.")
-
-    @staticmethod
-    def _price(nightly_rate: Decimal, nights: int) -> Decimal:
-        total = (Decimal(nightly_rate) * nights).quantize(Decimal("0.01"))
-        if total > MAX_TOTAL_PRICE:
-            raise ValidationError(
-                f"The total price of {total} is above the maximum this system "
-                f"can store ({MAX_TOTAL_PRICE}). Shorten the stay or lower the rate."
-            )
-        return total
 
     @staticmethod
     def _assert_is_manager(acting_user: User | None, action: str) -> None:
@@ -126,6 +113,39 @@ class ReservationService:
                 f"Room {room.room_number} is already booked for part of "
                 f"{check_in.isoformat()} → {check_out.isoformat()}."
             )
+
+    async def _commit_booking(self) -> None:
+        """Commit a booking write, translating a lost race into a 409.
+
+        `_assert_room_free` above reads and then this writes, which is
+        time-of-check/time-of-use: two requests arriving together both read
+        "free" and both insert. On PostgreSQL the `no_double_booking` exclusion
+        constraint refuses the second one, and that arrives here as an
+        `IntegrityError` — which is not an `AppError`, so without this it would
+        bypass the exception handlers and answer 500. The check above still runs
+        first because it produces the message a receptionist can act on; this is
+        only the backstop for the interleaving it cannot see.
+
+        `reference` is unique too, so a collision in `_generate_reference`
+        surfaces the same way — the retry loop there checks by reading, which
+        protects against the case that cannot happen rather than the one that
+        can.
+        """
+        try:
+            await self.db.commit()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            detail = str(exc.orig) if exc.orig is not None else ""
+            if "no_double_booking" in detail:
+                raise ConflictError(
+                    "That room was booked for part of these dates by someone "
+                    "else a moment ago. Please pick another room or another date."
+                ) from exc
+            if "reference" in detail:
+                raise ConflictError(
+                    "Could not allocate a booking reference. Please retry."
+                ) from exc
+            raise
 
     # ----------------------------------------------------------------- reads
     async def get(self, reservation_id: int) -> Reservation:
@@ -191,10 +211,10 @@ class ReservationService:
             children=payload.children,
             status=ReservationStatus.CONFIRMED,
             nightly_rate=nightly_rate,
-            total_price=self._price(nightly_rate, nights),
+            total_price=accommodation_charge(nightly_rate, nights),
             special_requests=payload.special_requests,
         )
-        await self.db.commit()
+        await self._commit_booking()
         return await self.get(reservation.id)
 
     # ---------------------------------------------------------- modification
@@ -270,9 +290,9 @@ class ReservationService:
             reservation.nightly_rate = Decimal(room.room_type.base_price)
 
         nights = (reservation.check_out_date - reservation.check_in_date).days
-        reservation.total_price = self._price(reservation.nightly_rate, nights)
+        reservation.total_price = accommodation_charge(reservation.nightly_rate, nights)
 
-        await self.db.commit()
+        await self._commit_booking()
         return await self.get(reservation.id)
 
     # ------------------------------------------------------------- lifecycle
@@ -295,6 +315,26 @@ class ReservationService:
             raise ConflictError(
                 f"Room {reservation.room.room_number} is out of service. "
                 "Move the guest to another room first."
+            )
+
+        # Selling a room and occupying it are different questions, and the
+        # calendar only answers the first. Overlap is defined with strict
+        # comparisons so same-day turnover is sellable — correct — but that
+        # means a stay ending today and a stay starting today are both legal,
+        # and nothing here used to stop the arriving guest being checked into a
+        # room the departing one has not left. That is how room 502 ended up
+        # holding two simultaneous checked-in reservations; widening
+        # `arrivals_on`/`departures_on` to `<=` only stopped the result being
+        # invisible. The room has to be physically empty first.
+        occupants = await self.reservations.active_for_room(reservation.room_id)
+        if occupants:
+            blocking = occupants[0]
+            raise ConflictError(
+                f"Room {reservation.room.room_number} is still occupied by "
+                f"{blocking.guest.full_name} ({blocking.reference}), due out "
+                f"{blocking.check_out_date.isoformat()}. Check them out first, "
+                "or move this guest to another room.",
+                details={"occupied_by": blocking.reference},
             )
 
         reservation.status = ReservationStatus.CHECKED_IN

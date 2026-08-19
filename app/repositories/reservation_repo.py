@@ -155,18 +155,48 @@ class ReservationRepository(BaseRepository[Reservation]):
         )
         return Decimal(str((await self.db.execute(stmt)).scalar_one()))
 
-    async def next_reference_seq(self) -> int:
-        """Sequence seed for human-readable booking references."""
-        stmt = select(func.count()).select_from(Reservation)
-        return int((await self.db.execute(stmt)).scalar_one()) + 1
+    async def active_for_room(self, room_id: int) -> list[Reservation]:
+        """Every stay currently checked into a room — normally none or one.
 
-    async def active_for_room(self, room_id: int) -> Reservation | None:
-        """The stay currently occupying a room, if any."""
-        stmt = _with_relations(select(Reservation)).where(
-            Reservation.room_id == room_id,
-            Reservation.status == ReservationStatus.CHECKED_IN,
+        Returns a list rather than `.first()` on purpose. Two simultaneous
+        checked-in stays in one room is an impossible state, and `.first()`
+        silently reported one of them, so whichever row the database happened to
+        return became the answer and the contradiction never surfaced. A list
+        makes it detectable: `check_in` refuses when it is non-empty, and
+        anything reading an occupant can see that there is more than one.
+        """
+        stmt = (
+            _with_relations(select(Reservation))
+            .where(
+                Reservation.room_id == room_id,
+                Reservation.status == ReservationStatus.CHECKED_IN,
+            )
+            .order_by(Reservation.check_out_date, Reservation.id)
         )
-        return (await self.db.execute(stmt)).unique().scalars().first()
+        return list((await self.db.execute(stmt)).unique().scalars())
+
+    async def occupant_of_room(self, room_id: int) -> Reservation | None:
+        """The stay to show as the occupant of a room, if any."""
+        occupants = await self.active_for_room(room_id)
+        return occupants[0] if occupants else None
+
+    async def blocking_for_room(self, room_id: int) -> list[Reservation]:
+        """Every stay holding this room, checked in or not yet arrived.
+
+        What "would break if this room disappeared" means. `upcoming_for_room`
+        answers a narrower question — the single next arrival, for the rooms
+        board — and returning only that made taking a room out of service look
+        harmless when it stranded a dozen bookings.
+        """
+        stmt = (
+            _with_relations(select(Reservation))
+            .where(
+                Reservation.room_id == room_id,
+                Reservation.status.in_(BLOCKING_STATUSES),
+            )
+            .order_by(Reservation.check_in_date, Reservation.id)
+        )
+        return list((await self.db.execute(stmt)).unique().scalars())
 
     async def upcoming_for_room(self, room_id: int) -> Reservation | None:
         """The next booking holding this room, arrival date passed or not.

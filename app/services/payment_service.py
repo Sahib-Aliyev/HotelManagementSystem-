@@ -13,7 +13,7 @@ from app.models.user import User
 from app.repositories.payment_repo import PaymentRepository
 from app.repositories.reservation_repo import ReservationRepository
 from app.schemas.payment import Folio, FolioLine, PaymentCreate
-from app.services.pricing import total_due
+from app.services.pricing import tax_on, total_due
 
 CENTS = Decimal("0.01")
 
@@ -35,6 +35,25 @@ class PaymentService:
             raise NotFoundError("Reservation not found.")
         if reservation.status == ReservationStatus.CANCELLED:
             raise ConflictError("Cannot take payment on a cancelled reservation.")
+
+        # A receipt number identifies one movement of money, so the same one
+        # cannot describe two. Without this, an identical body posted twice —
+        # a double-click, a client retry, an impatient receptionist — recorded
+        # the guest's money twice, and the overpayment ceiling below only
+        # limited how far it could go.
+        if payload.reference:
+            duplicate = await self.payments.get_by_reference(
+                reservation.id, payload.reference
+            )
+            if duplicate is not None:
+                raise ConflictError(
+                    f"A payment with reference {payload.reference} is already "
+                    f"recorded against this reservation "
+                    f"({duplicate.amount} on "
+                    f"{duplicate.created_at.date().isoformat()}). Use a different "
+                    "reference, or refund that one first.",
+                    details={"existing_payment_id": duplicate.id},
+                )
 
         paid = await self.reservations.amount_paid(reservation.id)
         outstanding = (total_due(reservation) - paid).quantize(CENTS)
@@ -88,7 +107,9 @@ class PaymentService:
             amount=payment.amount,
             method=payment.method,
             status=PaymentStatus.REFUNDED,
-            reference=payment.reference,
+            # Not the original's reference: a receipt number identifies one
+            # movement of money, and this is the opposite movement.
+            reference=f"REFUND-{payment.reference}" if payment.reference else None,
             note=note,
             paid_at=utcnow(),
             refunded_payment_id=payment.id,
@@ -105,19 +126,23 @@ class PaymentService:
 
         nights = reservation.nights
         rate = Decimal(reservation.nightly_rate)
-        accommodation = (rate * nights).quantize(CENTS)
+
+        # Every figure on the bill derives from the one stored charge. This used
+        # to compute the subtotal itself as `rate × nights` while taking the
+        # total from `total_due()`, which reads the stored `total_price` — two
+        # independent sources for one bill, with `tax_amount = total − subtotal`
+        # silently absorbing any difference between them.
+        subtotal = Decimal(reservation.total_price).quantize(CENTS)
+        tax_amount = tax_on(subtotal)
+        total = total_due(reservation)
 
         lines = [
             FolioLine(
                 label=f"{reservation.room.room_type.name} — Room {reservation.room.room_number}",
                 detail=f"{nights} night{'s' if nights != 1 else ''} × {rate} {settings.CURRENCY}",
-                amount=accommodation,
+                amount=subtotal,
             )
         ]
-
-        subtotal = accommodation
-        total = total_due(reservation)
-        tax_amount = (total - subtotal).quantize(CENTS)
 
         # total_price is stored net of tax; VAT is added on top and owed
         # along with it — the balance below is what check-out checks too.

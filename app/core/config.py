@@ -114,6 +114,11 @@ class Settings(BaseSettings):
             problems.append(
                 "CORS_ORIGINS cannot be '*' because the session cookie is credentialed"
             )
+        if "*" in self.trusted_host_list:
+            problems.append(
+                "TRUSTED_HOSTS cannot be '*' in production — it disables the Host "
+                "header check entirely. Set the real hostnames, comma separated."
+            )
         if problems:
             raise ValueError(
                 "Refusing to start with APP_ENV=production:\n  - " + "\n  - ".join(problems)

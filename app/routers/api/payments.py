@@ -4,7 +4,13 @@ from fastapi import APIRouter, status
 from fastapi.responses import Response
 
 from app.core.deps import DbSession, ManagerUser, StaffUser
-from app.schemas.payment import Folio, InvoiceRead, PaymentCreate, PaymentRead
+from app.schemas.payment import (
+    Folio,
+    InvoiceRead,
+    PaymentCreate,
+    PaymentRead,
+    RefundRequest,
+)
 from app.services.invoice_service import InvoiceService
 from app.services.payment_service import PaymentService
 
@@ -30,11 +36,20 @@ async def folio(reservation_id: int, db: DbSession, _user: StaffUser):
 
 @router.post("/{payment_id}/refund", response_model=PaymentRead)
 async def refund(
-    payment_id: int, db: DbSession, manager: ManagerUser, note: str | None = None
+    payment_id: int,
+    db: DbSession,
+    manager: ManagerUser,
+    payload: RefundRequest | None = None,
 ):
     """Returns the refund counter-entry; the settled payment it reverses is
-    left untouched."""
-    return await PaymentService(db).refund(payment_id, note, acting_user=manager)
+    left untouched.
+
+    The note travels in the body. As a query parameter a manager's free-text
+    justification ended up in every access log and proxy history along the way.
+    """
+    return await PaymentService(db).refund(
+        payment_id, payload.note if payload else None, acting_user=manager
+    )
 
 
 # ------------------------------------------------------------------ invoices

@@ -7,6 +7,7 @@ from typing import Any
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.database import utcnow
@@ -40,6 +41,30 @@ def waste_password_time() -> None:
     even though both paths return the same message.
     """
     pwd_context.verify("timing-equaliser-not-a-real-password", _DUMMY_HASH)
+
+
+# --------------------------------------------------------------------- async
+# bcrypt at cost factor 12 is ~200 ms of solid CPU. Called straight from an
+# `async def` handler it does not yield, so the whole event loop stops for that
+# long: five concurrent logins were measured as a single 997 ms stall in which
+# an asyncio heartbeat never ran once, capping logins at ~5/s per worker no
+# matter the hardware — and freezing every unrelated request behind them.
+# bcrypt releases the GIL, so a thread genuinely parallelises it. Anything that
+# hashes must go through these, never the sync functions above.
+
+
+async def hash_password_async(plain_password: str) -> str:
+    if len(plain_password.encode("utf-8")) > 72:
+        raise ValueError("Password must be 72 bytes or fewer")
+    return await run_in_threadpool(pwd_context.hash, plain_password)
+
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    return await run_in_threadpool(verify_password, plain_password, hashed_password)
+
+
+async def waste_password_time_async() -> None:
+    await run_in_threadpool(waste_password_time)
 
 
 def password_fingerprint(hashed_password: str) -> str:

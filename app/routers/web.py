@@ -47,6 +47,13 @@ def _context(request: Request, user, **extra) -> dict:
         "currency": settings.CURRENCY,
         "currency_symbol": settings.CURRENCY_SYMBOL,
         "tax_rate": settings.TAX_RATE,
+        # Configured since the first commit and read by nothing, so the hotel's
+        # stated turnover window existed only in the .env file. Shown on the
+        # front desk now. Deliberately not enforced — early check-in and late
+        # check-out are front-desk decisions — but `check_in` does refuse to put
+        # a second guest into a room somebody is still in.
+        "check_in_hour": f"{settings.CHECK_IN_HOUR:02d}:00",
+        "check_out_hour": f"{settings.CHECK_OUT_HOUR:02d}:00",
         "today": date.today().isoformat(),
         "tomorrow": (date.today() + timedelta(days=1)).isoformat(),
         "is_manager": user.role in (UserRole.ADMIN, UserRole.MANAGER) if user else False,

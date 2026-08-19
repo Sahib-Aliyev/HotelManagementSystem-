@@ -6,13 +6,30 @@ from datetime import datetime
 from decimal import Decimal  # runtime import: SQLAlchemy resolves Mapped[] annotations
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, TimestampMixin, utcnow
 
 if TYPE_CHECKING:
     from app.models.reservation import Reservation
+
+
+class InvoiceCounter(Base):
+    """One row per year holding the last invoice number allocated.
+
+    Invoice numbers used to be `COUNT(*) + 1` over the invoices table, which
+    reused a number as soon as one was deleted and collided under concurrency.
+    This is the sequence that replaces it: incremented with
+    `UPDATE … RETURNING` so the row lock serialises allocation. Kept as a table
+    rather than a native `CREATE SEQUENCE` so SQLite and PostgreSQL behave
+    identically.
+    """
+
+    __tablename__ = "invoice_counters"
+
+    year: Mapped[int] = mapped_column(Integer, unique=True, index=True, nullable=False)
+    last_number: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 class Invoice(Base, TimestampMixin):

@@ -3,12 +3,18 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: hotel
-      POSTGRES_PASSWORD: hotel
+      # No default, like SECRET_KEY below: this stack runs with
+      # APP_ENV=production, and "hotel"/"hotel" is not a production credential.
+      #   export POSTGRES_PASSWORD=$(python -c "import secrets; print(secrets.token_urlsafe(24))")
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD before running compose}
       POSTGRES_DB: hotel_db
     volumes:
       - hotel_pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Deliberately not published to the host: the app reaches the database over
+    # the compose network, and nothing else needs to. Add a ports mapping only
+    # when you actually want a psql client from outside.
+    expose:
+      - "5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hotel -d hotel_db"]
       interval: 5s
@@ -23,18 +29,25 @@ services:
     environment:
       APP_ENV: production
       DEBUG: "false"
-      DATABASE_URL: postgresql+asyncpg://hotel:hotel@db:5432/hotel_db
+      DATABASE_URL: postgresql+asyncpg://hotel:${POSTGRES_PASSWORD}@db:5432/hotel_db
       # No default on purpose: APP_ENV=production refuses to boot on a shipped
       # key, so compose should fail here with a readable message instead.
       # export SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY before running compose}
       CORS_ORIGINS: http://localhost:8000
+      # The default is "*", which disables the Host header check — and production
+      # now refuses to boot on it rather than starting with the control off.
+      TRUSTED_HOSTS: localhost,127.0.0.1
     ports:
       - "8000:8000"
+    restart: unless-stopped
     # APP_ENV=production skips create_all, so migrate then serve.
+    # --proxy-headers so the rate limiter sees the real client IP behind a proxy
+    # instead of throttling the whole hotel as one address. Set
+    # --forwarded-allow-ips to the proxy's address in a real deployment.
     command: >
       sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"
 
 volumes:
   hotel_pgdata:

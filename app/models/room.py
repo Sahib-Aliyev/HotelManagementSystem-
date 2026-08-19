@@ -7,10 +7,10 @@ from decimal import Decimal  # runtime import: SQLAlchemy resolves Mapped[] anno
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    JSON,
     Enum as SAEnum,
     ForeignKey,
     Integer,
-    JSON,
     Numeric,
     String,
     Text,

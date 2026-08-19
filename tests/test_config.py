@@ -12,6 +12,7 @@ SAFE_PRODUCTION = {
     "DEBUG": False,
     "SECRET_KEY": "x" * 40,
     "CORS_ORIGINS": "https://hotel.example",
+    "TRUSTED_HOSTS": "hotel.example",
 }
 
 
@@ -23,8 +24,19 @@ SAFE_PRODUCTION = {
         {"SECRET_KEY": "tooshort"},
         {"DEBUG": True},
         {"CORS_ORIGINS": "*"},
+        # The setting existed and the boot check did not know about it, so
+        # production started with the Host header check disabled — and the
+        # shipped compose file did exactly that.
+        {"TRUSTED_HOSTS": "*"},
     ],
-    ids=["shipped-key", "compose-key", "short-key", "debug-on", "cors-wildcard"],
+    ids=[
+        "shipped-key",
+        "compose-key",
+        "short-key",
+        "debug-on",
+        "cors-wildcard",
+        "trusted-hosts-wildcard",
+    ],
 )
 def test_production_refuses_to_start_with_unsafe_settings(override):
     with pytest.raises(ValueError):

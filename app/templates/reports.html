@@ -59,7 +59,7 @@
   {# ------------------------------------------------------------- charts #}
   <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
     <div class="card card-bd">
-      <h2 class="panel-title">Revenue by day</h2>
+      <h2 class="panel-title">Cash collected by day</h2>
       <p class="panel-sub">Payments settled in the period</p>
       <div class="relative mt-4 h-72">
         <div x-show="loading" class="skeleton absolute inset-0"></div>
@@ -177,9 +177,12 @@ function reportsPage() {
       if (!r) return [];
       const days = fmt.nightsBetween(r.period_start, r.period_end) + 1;
       return [
-        { label: 'Total revenue', value: fmt.money(r.total_revenue), hint: `over ${days} day(s)` },
-        { label: 'Bookings', value: r.total_bookings, hint: `${r.total_nights} room-night(s) sold` },
-        { label: 'Average daily rate', value: fmt.money(r.average_daily_rate), hint: 'revenue ÷ nights sold' },
+        // Two bases, each named. These were one "Total revenue" computed the
+        // cash way while the room-type table below was computed the accrual
+        // way, so the page showed two revenues that could never agree.
+        { label: 'Room revenue', value: fmt.money(r.total_revenue), hint: `${r.total_nights} night(s) sold, net of VAT` },
+        { label: 'Cash collected', value: fmt.money(r.cash_collected), hint: `paid in over ${days} day(s), VAT incl.` },
+        { label: 'Average daily rate', value: fmt.money(r.average_daily_rate), hint: 'room revenue ÷ nights sold' },
         { label: 'Average occupancy', value: `${r.average_occupancy}%`, hint: 'of sellable room-nights' },
       ];
     },
@@ -225,9 +228,9 @@ function reportsPage() {
       this._charts.revenue = new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: this.report.revenue_series.map((p) => p.label),
+          labels: this.report.cash_series.map((p) => p.label),
           datasets: [{
-            data: this.report.revenue_series.map((p) => Number(p.value)),
+            data: this.report.cash_series.map((p) => Number(p.value)),
             backgroundColor: t.brand,
             hoverBackgroundColor: '#6366f1',
             borderRadius: 6,
@@ -331,7 +334,8 @@ function reportsPage() {
         ['Period', r.period_start, r.period_end],
         [],
         ['Metric', 'Value'],
-        ['Total revenue', r.total_revenue],
+        ['Room revenue (accrual, net of VAT)', r.total_revenue],
+        ['Cash collected (VAT incl.)', r.cash_collected],
         ['Bookings', r.total_bookings],
         ['Room-nights sold', r.total_nights],
         ['Average daily rate', r.average_daily_rate],
@@ -340,8 +344,8 @@ function reportsPage() {
         ['Room type', 'Bookings', 'Nights sold', 'Revenue'],
         ...r.room_type_performance.map((x) => [x.room_type, x.bookings, x.nights_sold, x.revenue]),
         [],
-        ['Date', 'Revenue', 'Occupied rooms', 'Occupancy %'],
-        ...r.revenue_series.map((p, i) => [
+        ['Date', 'Cash collected', 'Occupied rooms', 'Occupancy %'],
+        ...r.cash_series.map((p, i) => [
           r.occupancy_series[i]?.day || p.label,
           p.value,
           r.occupancy_series[i]?.occupied ?? '',
