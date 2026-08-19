@@ -584,3 +584,32 @@ async def test_health_reports_whether_the_database_answers(client):
     ok = await client.get("/health")
     assert ok.status_code == 200
     assert ok.json() == {"status": "ok"}
+
+
+async def test_a_guest_with_an_upcoming_stay_cannot_be_anonymised(manager_client, seeded):
+    """Erasing somebody still expected leaves the front desk holding a booking
+    it cannot put a name to — the same problem as erasing an occupant, one step
+    earlier. The first version of this guard only looked at checked-in stays."""
+    created = await manager_client.post(
+        "/api/v1/reservations",
+        json=booking(seeded["guests"][0].id, seeded["rooms"][1].id),
+    )
+    assert created.status_code == 201
+
+    refused = await manager_client.post(
+        f"/api/v1/guests/{seeded['guests'][0].id}/anonymise"
+    )
+    assert refused.status_code == 409
+    assert (
+        refused.json()["error"]["details"]["reservation"] == created.json()["reference"]
+    )
+
+    # Cancel it and the erasure goes through.
+    await manager_client.post(
+        f"/api/v1/reservations/{created.json()['id']}/cancel",
+        json={"reason": "guest asked to be forgotten"},
+    )
+    erased = await manager_client.post(
+        f"/api/v1/guests/{seeded['guests'][0].id}/anonymise"
+    )
+    assert erased.status_code == 200

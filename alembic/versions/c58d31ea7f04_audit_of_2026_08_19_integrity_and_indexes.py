@@ -43,7 +43,17 @@ down_revision: str | None = "a1c4f7b920d3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-BLOCKING = "('pending','confirmed','checked_in')"
+#: The stored form of `BLOCKING_STATUSES`, for the raw SQL below.
+#:
+#: **Upper case, and that is not cosmetic.** SQLAlchemy's `Enum` persists a
+#: Python enum by its *name*, not its value, so `ReservationStatus.CONFIRMED`
+#: is the string `'CONFIRMED'` in the column even though `.value` is
+#: `'confirmed'`. Written lower case, the `WHERE` clause below matches no row
+#: ever, and the exclusion constraint silently guards nothing — it would still
+#: be created, still show up in the table definition, and never once fire.
+#: `tests/test_migration_literals.py` compares these strings against what the
+#: ORM actually emits, because nothing else would notice.
+BLOCKING = "('PENDING','CONFIRMED','CHECKED_IN')"
 
 
 def _is_sqlite() -> bool:

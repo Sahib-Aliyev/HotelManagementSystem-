@@ -149,13 +149,19 @@ class InvoiceRepository(BaseRepository[Invoice]):
         )
         allocated = (await self.db.execute(stmt)).scalar_one_or_none()
         if allocated is None:
-            # First invoice of this year. A unique constraint on `year` makes the
-            # race here safe: the loser's INSERT fails and it retries the UPDATE.
+            # First invoice of this year. The unique index on `year` makes the
+            # race safe: the loser's INSERT fails and it retries the UPDATE.
+            #
+            # Inside a SAVEPOINT, not a bare try/except. Catching the
+            # `IntegrityError` and calling `db.rollback()` would discard the
+            # caller's whole transaction — a repository has no business
+            # unwinding work it cannot see. `begin_nested()` scopes the undo to
+            # this one INSERT.
             try:
-                self.db.add(InvoiceCounter(year=year, last_number=1))
-                await self.db.flush()
+                async with self.db.begin_nested():
+                    self.db.add(InvoiceCounter(year=year, last_number=1))
+                    await self.db.flush()
                 return 1
             except IntegrityError:
-                await self.db.rollback()
                 allocated = (await self.db.execute(stmt)).scalar_one()
         return int(allocated)

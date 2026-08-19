@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.guest import Guest
-from app.models.reservation import ReservationStatus
+from app.models.reservation import BLOCKING_STATUSES
 from app.repositories.guest_repo import GuestRepository
 from app.repositories.reservation_repo import ReservationRepository
 from app.schemas.guest import GuestCreate, GuestUpdate
@@ -151,14 +151,22 @@ class GuestService:
         if guest.full_name == ANONYMISED_NAME:
             raise ConflictError("This guest record has already been anonymised.")
 
-        active, _ = await self.reservations.search(
-            guest_id=guest_id, status=ReservationStatus.CHECKED_IN, limit=1
-        )
-        if active:
-            raise ConflictError(
-                "This guest is currently checked in. Check them out before "
-                "erasing their personal data."
+        # Every stay that has not finished, not only the one in progress. Erasing
+        # a guest who is still expected would leave the front desk holding a
+        # booking it cannot put a name to — the same problem as erasing an
+        # occupant, one step earlier.
+        for status in BLOCKING_STATUSES:
+            pending, _ = await self.reservations.search(
+                guest_id=guest_id, status=status, limit=1
             )
+            if pending:
+                raise ConflictError(
+                    "This guest has a stay that is checked in or still to come "
+                    f"({pending[0].reference}, arriving "
+                    f"{pending[0].check_in_date.isoformat()}). Complete or "
+                    "cancel it before erasing their personal data.",
+                    details={"reservation": pending[0].reference},
+                )
 
         guest.full_name = ANONYMISED_NAME
         guest.phone = ANONYMISED_PHONE
