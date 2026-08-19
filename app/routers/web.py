@@ -18,11 +18,31 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 router = APIRouter(include_in_schema=False)
 
 
+_ASSETS = (
+    BASE_DIR / "static" / "css" / "app.css",
+    BASE_DIR / "static" / "js" / "app.js",
+)
+
+
+def _asset_version() -> str:
+    """Cache-buster for /static — StaticFiles serves those with a long cache."""
+    stamps = [f.stat().st_mtime_ns for f in _ASSETS if f.exists()]
+    return f"{max(stamps, default=0):x}"
+
+
+# Recomputed per request only in development, where the files change under a
+# running server; in production the mtimes are fixed at boot.
+_ASSET_VERSION = _asset_version()
+
+
 def _context(request: Request, user, **extra) -> dict:
     """Everything base.html needs, plus per-page extras."""
     return {
         "request": request,
         "user": user,
+        "asset_version": (
+            _asset_version() if settings.APP_ENV == "development" else _ASSET_VERSION
+        ),
         "app_name": settings.APP_NAME,
         "currency": settings.CURRENCY,
         "currency_symbol": settings.CURRENCY_SYMBOL,

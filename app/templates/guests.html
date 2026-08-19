@@ -14,35 +14,38 @@
         <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>
       </svg>
       <input type="search" x-model.debounce.350ms="query" @input="page = 1; load()"
-             placeholder="Search by name, phone, email or document number…"
-             class="w-full rounded-xl border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm shadow-sm
-                    focus:border-brand-500 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+             placeholder="Search by name, phone, email or document number…" class="input pl-10">
     </div>
-    <button @click="openForm()"
-            class="flex items-center justify-center gap-2 rounded-xl bg-brand-700 px-4 py-2.5 text-sm
-                   font-semibold text-white shadow-sm transition hover:bg-brand-600">
+    <button @click="openForm()" class="btn btn-primary">
       <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
       Register guest
     </button>
   </div>
 
   {# ------------------------------------------------------------- table #}
-  <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+  <div class="card overflow-hidden">
+    <div class="card-hd">
+      <p class="panel-title">
+        <span x-text="total.toLocaleString()"></span> guest<span x-show="total !== 1">s</span>
+      </p>
+      <p class="panel-sub" x-show="query" style="display:none">Matching “<span x-text="query"></span>”</p>
+    </div>
+
     <div class="overflow-x-auto">
-      <table class="w-full min-w-[720px] text-sm">
-        <thead class="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50">
-          <tr class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <th class="px-5 py-3">Guest</th>
-            <th class="px-5 py-3">Contact</th>
-            <th class="px-5 py-3">Document</th>
-            <th class="px-5 py-3">Nationality</th>
-            <th class="px-5 py-3 text-right">Actions</th>
+      <table class="tbl min-w-[740px]">
+        <thead>
+          <tr>
+            <th>Guest</th>
+            <th>Contact</th>
+            <th>Document</th>
+            <th>Nationality</th>
+            <th class="text-right">Actions</th>
           </tr>
         </thead>
 
         <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
           <template x-if="loading">
-            <tr><td colspan="5" class="p-5">
+            <tr class="hover:bg-transparent"><td colspan="5" class="p-5">
               <div class="space-y-3">
                 <div class="skeleton h-4 w-full"></div>
                 <div class="skeleton h-4 w-5/6"></div>
@@ -52,10 +55,10 @@
           </template>
 
           <template x-if="!loading && !guests.length">
-            <tr><td colspan="5">
+            <tr class="hover:bg-transparent"><td colspan="5">
               <div class="flex flex-col items-center px-5 py-16 text-center">
-                <div class="grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 dark:bg-slate-800">
-                  <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                <div class="grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
+                  <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
                     <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
                   </svg>
                 </div>
@@ -63,50 +66,39 @@
                    x-text="query ? 'No guests match that search' : 'No guests registered yet'"></p>
                 <p class="mt-1 max-w-xs text-xs text-slate-500"
                    x-text="query ? 'Try a different name, phone or document number.' : 'Register your first guest to get started.'"></p>
-                <button @click="openForm()" class="mt-4 rounded-xl bg-brand-700 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600">
-                  Register guest
-                </button>
+                <button @click="openForm()" class="btn btn-primary btn-sm mt-4">Register guest</button>
               </div>
             </td></tr>
           </template>
 
           <template x-for="g in guests" :key="g.id">
-            <tr class="transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
-              <td class="px-5 py-3.5">
+            <tr>
+              <td>
                 <div class="flex items-center gap-3">
-                  <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-xs font-bold
-                               text-brand-700 dark:bg-brand-700/20 dark:text-brand-200" x-text="initials(g.full_name)"></span>
+                  <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-[11px] font-bold
+                               text-brand-700 ring-1 ring-inset ring-brand-200
+                               dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/30"
+                        x-text="initials(g.full_name)"></span>
                   <div class="min-w-0">
                     <p class="truncate font-medium text-slate-900 dark:text-white" x-text="g.full_name"></p>
                     <p class="truncate text-xs text-slate-500" x-text="g.date_of_birth ? `Born ${fmt.date(g.date_of_birth)}` : '—'"></p>
                   </div>
                 </div>
               </td>
-              <td class="px-5 py-3.5">
+              <td>
                 <p class="text-slate-700 dark:text-slate-300" x-text="g.phone"></p>
                 <p class="truncate text-xs text-slate-500" x-text="g.email || '—'"></p>
               </td>
-              <td class="px-5 py-3.5">
+              <td>
                 <p class="font-mono text-xs text-slate-700 dark:text-slate-300" x-text="g.document_number"></p>
                 <p class="text-xs text-slate-500" x-text="fmt.titleCase(g.document_type)"></p>
               </td>
-              <td class="px-5 py-3.5 text-slate-600 dark:text-slate-400" x-text="g.nationality || '—'"></td>
-              <td class="px-5 py-3.5">
+              <td class="text-slate-600 dark:text-slate-400" x-text="g.nationality || '—'"></td>
+              <td>
                 <div class="flex justify-end gap-1.5">
-                  <button @click="viewHistory(g)" title="Stay history"
-                          class="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600
-                                 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
-                    History
-                  </button>
-                  <button @click="openForm(g)" title="Edit"
-                          class="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600
-                                 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
-                    Edit
-                  </button>
-                  <a :href="`/reservations/new?guest_id=${g.id}`"
-                     class="rounded-lg bg-accent-500 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-600">
-                    Book
-                  </a>
+                  <button @click="viewHistory(g)" title="Stay history" class="btn btn-outline btn-xs">History</button>
+                  <button @click="openForm(g)" title="Edit" class="btn btn-outline btn-xs">Edit</button>
+                  <a :href="`/reservations/new?guest_id=${g.id}`" class="btn btn-accent btn-xs">Book</a>
                 </div>
               </td>
             </tr>
@@ -115,61 +107,65 @@
       </table>
     </div>
 
-    <div x-show="!loading && total > size" style="display:none"
-         class="flex items-center justify-between border-t border-slate-200 px-5 py-3 dark:border-slate-800">
+    <div x-show="!loading && total > size" style="display:none" class="card-ft flex items-center justify-between">
       <p class="text-xs text-slate-500">
-        Showing <span x-text="(page - 1) * size + 1"></span>–<span x-text="Math.min(page * size, total)"></span>
+        Showing <span class="font-semibold text-slate-700 dark:text-slate-300" x-text="(page - 1) * size + 1"></span>–<span
+          class="font-semibold text-slate-700 dark:text-slate-300" x-text="Math.min(page * size, total)"></span>
         of <span x-text="total"></span>
       </p>
       <div class="flex gap-1.5">
-        <button @click="page--; load()" :disabled="page === 1"
-                class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium disabled:opacity-40
-                       dark:border-slate-700 dark:text-slate-300">Previous</button>
-        <button @click="page++; load()" :disabled="page * size >= total"
-                class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium disabled:opacity-40
-                       dark:border-slate-700 dark:text-slate-300">Next</button>
+        <button @click="page--; load()" :disabled="page === 1" class="btn btn-outline btn-xs">
+          <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+          Previous
+        </button>
+        <button @click="page++; load()" :disabled="page * size >= total" class="btn btn-outline btn-xs">
+          Next
+          <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
       </div>
     </div>
   </div>
 
   {# -------------------------------------------------------- guest form #}
-  <div x-show="form.open" style="display:none" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
-    <div @click="form.open = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+  <div x-show="form.open" style="display:none" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4"
+       @keydown.escape.window="form.open = false">
+    <div @click="form.open = false" x-show="form.open" x-transition.opacity
+         class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
 
-    <div class="relative my-8 w-full max-w-2xl animate-fade-up rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+    <div class="relative my-8 w-full max-w-2xl animate-pop-in rounded-2xl bg-white shadow-pop dark:bg-slate-900"
+         role="dialog" aria-modal="true">
       <header class="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-        <h2 class="text-base font-semibold text-slate-900 dark:text-white"
-            x-text="form.id ? 'Edit guest' : 'Register a new guest'"></h2>
-        <button @click="form.open = false" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+        <div>
+          <h2 class="text-base font-semibold tracking-tight text-slate-900 dark:text-white"
+              x-text="form.id ? 'Edit guest' : 'Register a new guest'"></h2>
+          <p class="panel-sub">Fields marked * are required.</p>
+        </div>
+        <button @click="form.open = false" aria-label="Close" class="btn-icon">
           <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </header>
 
       <form @submit.prevent="save()" class="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
         <div class="sm:col-span-2">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Full name *</label>
-          <input type="text" x-model="form.data.full_name" required
-                 class="mt-1.5 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                 :class="form.errors.full_name && 'border-red-400'">
-          <p x-show="form.errors.full_name" x-text="form.errors.full_name" class="mt-1 text-xs text-red-600" style="display:none"></p>
+          <label class="field">Full name *</label>
+          <input type="text" x-model="form.data.full_name" required class="input mt-1.5"
+                 :class="form.errors.full_name && 'input-error'">
+          <p x-show="form.errors.full_name" x-text="form.errors.full_name" class="error-text" style="display:none"></p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Phone *</label>
-          <input type="tel" x-model="form.data.phone" required placeholder="+994 50 000 00 00"
-                 class="mt-1.5 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          <label class="field">Phone *</label>
+          <input type="tel" x-model="form.data.phone" required placeholder="+994 50 000 00 00" class="input mt-1.5">
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
-          <input type="email" x-model="form.data.email"
-                 class="mt-1.5 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          <label class="field">Email</label>
+          <input type="email" x-model="form.data.email" class="input mt-1.5">
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Document type *</label>
-          <select x-model="form.data.document_type"
-                  class="mt-1.5 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          <label class="field">Document type *</label>
+          <select x-model="form.data.document_type" class="input mt-1.5">
             <option value="passport">Passport</option>
             <option value="id_card">ID card</option>
             <option value="driver_license">Driver licence</option>
@@ -177,49 +173,42 @@
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Document number *</label>
-          <input type="text" x-model="form.data.document_number" required
-                 class="mt-1.5 w-full rounded-xl border-slate-300 py-2.5 font-mono text-sm uppercase
-                        dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          <label class="field">Document number *</label>
+          <input type="text" x-model="form.data.document_number" required class="input mt-1.5 font-mono uppercase">
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Nationality</label>
-          <input type="text" x-model="form.data.nationality" placeholder="Azerbaijan"
-                 class="mt-1.5 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          <label class="field">Nationality</label>
+          <input type="text" x-model="form.data.nationality" placeholder="Azerbaijan" class="input mt-1.5">
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Date of birth</label>
-          <input type="date" x-model="form.data.date_of_birth" :max="window.APP.today"
-                 class="mt-1.5 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          <label class="field">Date of birth</label>
+          <input type="date" x-model="form.data.date_of_birth" :max="window.APP.today" class="input mt-1.5">
         </div>
 
         <div class="sm:col-span-2">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Address</label>
-          <input type="text" x-model="form.data.address"
-                 class="mt-1.5 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          <label class="field">Address</label>
+          <input type="text" x-model="form.data.address" class="input mt-1.5">
         </div>
 
         <div class="sm:col-span-2">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Notes</label>
+          <label class="field">Notes</label>
           <textarea x-model="form.data.notes" rows="2" placeholder="Allergies, preferences, VIP status…"
-                    class="mt-1.5 w-full rounded-xl border-slate-300 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"></textarea>
+                    class="input mt-1.5"></textarea>
         </div>
 
         <div x-show="form.error" style="display:none"
-             class="sm:col-span-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700
-                    dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300" x-text="form.error"></div>
+             class="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700
+                    dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300 sm:col-span-2" x-text="form.error"></div>
 
         <div class="flex justify-end gap-2 sm:col-span-2">
-          <button type="button" @click="form.open = false"
-                  class="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700
-                         transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
-            Cancel
-          </button>
-          <button type="submit" :disabled="form.busy"
-                  class="rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-semibold text-white transition
-                         hover:bg-brand-600 disabled:opacity-50">
+          <button type="button" @click="form.open = false" class="btn btn-outline">Cancel</button>
+          <button type="submit" :disabled="form.busy" class="btn btn-primary">
+            <svg x-show="form.busy" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" style="display:none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+            </svg>
             <span x-text="form.busy ? 'Saving…' : (form.id ? 'Save changes' : 'Register guest')"></span>
           </button>
         </div>
@@ -228,16 +217,19 @@
   </div>
 
   {# ------------------------------------------------------ history drawer #}
-  <div x-show="history.open" style="display:none" class="fixed inset-0 z-50 flex justify-end">
-    <div @click="history.open = false" class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
-    <aside class="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl dark:bg-slate-900">
+  <div x-show="history.open" style="display:none" class="fixed inset-0 z-50 flex justify-end"
+       @keydown.escape.window="history.open = false">
+    <div @click="history.open = false" x-show="history.open" x-transition.opacity
+         class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+    <aside class="relative flex h-full w-full max-w-md animate-slide-in flex-col bg-white shadow-pop dark:bg-slate-900"
+           role="dialog" aria-modal="true">
       <header class="flex items-start justify-between border-b border-slate-200 p-5 dark:border-slate-800">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Stay history</p>
-          <h2 class="mt-1 text-lg font-bold text-slate-900 dark:text-white" x-text="history.guest?.full_name"></h2>
+          <p class="eyebrow">Stay history</p>
+          <h2 class="mt-1 text-lg font-bold tracking-tight text-slate-900 dark:text-white" x-text="history.guest?.full_name"></h2>
           <p class="text-xs text-slate-500" x-text="`${history.items.length} stay(s) on record`"></p>
         </div>
-        <button @click="history.open = false" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+        <button @click="history.open = false" aria-label="Close" class="btn-icon">
           <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </header>
@@ -248,13 +240,19 @@
         </div>
 
         <div x-show="!history.loading && !history.items.length" style="display:none" class="py-12 text-center">
-          <p class="text-sm font-medium text-slate-600 dark:text-slate-300">No stays yet</p>
+          <div class="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>
+            </svg>
+          </div>
+          <p class="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">No stays yet</p>
           <p class="mt-1 text-xs text-slate-400">This guest has never checked in.</p>
         </div>
 
         <div class="space-y-2.5">
           <template x-for="r in history.items" :key="r.id">
-            <div class="rounded-xl border border-slate-200 p-3.5 dark:border-slate-800">
+            <div class="rounded-xl border border-slate-200 p-3.5 transition hover:border-slate-300
+                        hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40">
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
                   <p class="font-mono text-xs text-slate-400" x-text="r.reference"></p>
@@ -264,9 +262,11 @@
                      x-text="`${fmt.date(r.check_in_date)} → ${fmt.date(r.check_out_date)} (${r.nights}n)`"></p>
                 </div>
                 <div class="shrink-0 text-right">
-                  <span class="rounded-md px-2 py-0.5 text-[11px] font-semibold" :class="badgeClass(r.status)"
-                        x-text="fmt.titleCase(r.status)"></span>
-                  <p class="mt-1.5 text-sm font-bold text-slate-900 dark:text-white" x-text="fmt.money(r.total_price)"></p>
+                  <span class="badge" :class="badgeClass(r.status)">
+                    <span class="h-1.5 w-1.5 rounded-full" :class="dotClass(r.status)"></span>
+                    <span x-text="fmt.titleCase(r.status)"></span>
+                  </span>
+                  <p class="num mt-1.5 text-sm font-bold text-slate-900 dark:text-white" x-text="fmt.money(r.total_price)"></p>
                 </div>
               </div>
             </div>

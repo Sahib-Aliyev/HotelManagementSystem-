@@ -7,37 +7,30 @@
 <div x-data="reportsPage()" x-init="boot()" class="space-y-5">
 
   {# ------------------------------------------------------- period picker #}
-  <div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm
-              dark:border-slate-800 dark:bg-slate-900 lg:flex-row lg:items-center">
+  <div class="card card-bd no-print flex flex-col gap-3 lg:flex-row lg:items-center">
     <div class="flex flex-wrap gap-1.5">
       <template x-for="p in presets" :key="p.label">
-        <button @click="applyPreset(p)"
-                class="rounded-lg px-3 py-2 text-xs font-semibold transition"
-                :class="activePreset === p.label
-                  ? 'bg-brand-700 text-white'
-                  : 'border border-slate-300 text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:text-slate-300'"
+        <button @click="applyPreset(p)" class="chip" :class="activePreset === p.label && 'chip-on'"
                 x-text="p.label"></button>
       </template>
     </div>
 
     <div class="flex flex-1 flex-wrap items-center gap-2 lg:justify-end">
       <input type="date" x-model="range.start" @change="activePreset = ''; load()"
-             class="rounded-xl border-slate-300 py-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+             aria-label="Period start" class="input input-sm w-auto">
       <span class="text-xs text-slate-400">→</span>
       <input type="date" x-model="range.end" @change="activePreset = ''; load()"
-             class="rounded-xl border-slate-300 py-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-white">
-      <button @click="exportCsv()" :disabled="loading || !report"
-              class="flex items-center gap-1.5 rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold
-                     text-slate-700 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700
-                     dark:text-slate-200 dark:hover:bg-slate-800">
+             aria-label="Period end" class="input input-sm w-auto">
+      <button @click="exportCsv()" :disabled="loading || !report" class="btn btn-outline btn-sm">
         <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
         </svg>
         Export CSV
       </button>
-      <button @click="window.print()"
-              class="rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold text-slate-700
-                     transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+      <button @click="window.print()" class="btn btn-outline btn-sm">
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5h20v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/>
+        </svg>
         Print
       </button>
     </div>
@@ -46,36 +39,37 @@
   {# ---------------------------------------------------------- KPI cards #}
   <div x-show="loading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
     <template x-for="i in 4" :key="i">
-      <div class="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+      <div class="card card-bd">
         <div class="skeleton h-3 w-24"></div><div class="skeleton mt-4 h-8 w-24"></div>
       </div>
     </template>
   </div>
 
-  <div x-show="!loading && report" style="display:none" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <div x-show="!loading && report" style="display:none"
+       class="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
     <template x-for="k in kpis" :key="k.label">
-      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500" x-text="k.label"></p>
-        <p class="mt-2.5 text-2xl font-bold text-slate-900 dark:text-white" x-text="k.value"></p>
-        <p class="mt-1 text-xs text-slate-500" x-text="k.hint"></p>
+      <div class="card card-lift card-bd edge-top">
+        <p class="eyebrow" x-text="k.label"></p>
+        <p class="mt-2.5 text-2xl font-bold tracking-tight text-slate-900 dark:text-white" x-text="k.value"></p>
+        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400" x-text="k.hint"></p>
       </div>
     </template>
   </div>
 
   {# ------------------------------------------------------------- charts #}
   <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Revenue by day</h2>
-      <p class="text-xs text-slate-500">Payments settled in the period</p>
+    <div class="card card-bd">
+      <h2 class="panel-title">Revenue by day</h2>
+      <p class="panel-sub">Payments settled in the period</p>
       <div class="relative mt-4 h-72">
         <div x-show="loading" class="skeleton absolute inset-0"></div>
         <canvas x-ref="revenue"></canvas>
       </div>
     </div>
 
-    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Occupancy by day</h2>
-      <p class="text-xs text-slate-500">Share of sellable rooms sold each night</p>
+    <div class="card card-bd">
+      <h2 class="panel-title">Occupancy by day</h2>
+      <p class="panel-sub">Share of sellable rooms sold each night</p>
       <div class="relative mt-4 h-72">
         <div x-show="loading" class="skeleton absolute inset-0"></div>
         <canvas x-ref="occupancy"></canvas>
@@ -85,35 +79,36 @@
 
   <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
     {# ------------------------------------------------ room type table #}
-    <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm
-                dark:border-slate-800 dark:bg-slate-900 lg:col-span-3">
-      <div class="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-        <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Performance by room type</h2>
-        <p class="text-xs text-slate-500">Bookings that overlap the period</p>
+    <div class="card overflow-hidden lg:col-span-3">
+      <div class="card-hd">
+        <div>
+          <h2 class="panel-title">Performance by room type</h2>
+          <p class="panel-sub">Bookings that overlap the period</p>
+        </div>
       </div>
 
       <div class="overflow-x-auto">
-        <table class="w-full min-w-[520px] text-sm">
-          <thead class="bg-slate-50 dark:bg-slate-800/50">
-            <tr class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <th class="px-5 py-3">Room type</th>
-              <th class="px-5 py-3 text-right">Bookings</th>
-              <th class="px-5 py-3 text-right">Nights sold</th>
-              <th class="px-5 py-3 text-right">Revenue</th>
+        <table class="tbl min-w-[520px]">
+          <thead>
+            <tr>
+              <th>Room type</th>
+              <th class="text-right">Bookings</th>
+              <th class="text-right">Nights sold</th>
+              <th class="text-right">Revenue</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
             <template x-if="!loading && !(report?.room_type_performance || []).length">
-              <tr><td colspan="4" class="px-5 py-12 text-center text-sm text-slate-500">
+              <tr class="hover:bg-transparent"><td colspan="4" class="py-12 text-center text-sm text-slate-500">
                 No bookings in this period.
               </td></tr>
             </template>
             <template x-for="row in report?.room_type_performance || []" :key="row.room_type">
-              <tr class="transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                <td class="px-5 py-3.5 font-medium text-slate-900 dark:text-white" x-text="row.room_type"></td>
-                <td class="px-5 py-3.5 text-right text-slate-600 dark:text-slate-400" x-text="row.bookings"></td>
-                <td class="px-5 py-3.5 text-right text-slate-600 dark:text-slate-400" x-text="row.nights_sold"></td>
-                <td class="px-5 py-3.5 text-right font-semibold text-slate-900 dark:text-white" x-text="fmt.money(row.revenue)"></td>
+              <tr>
+                <td class="font-medium text-slate-900 dark:text-white" x-text="row.room_type"></td>
+                <td class="text-right text-slate-600 dark:text-slate-400" x-text="row.bookings"></td>
+                <td class="text-right text-slate-600 dark:text-slate-400" x-text="row.nights_sold"></td>
+                <td class="text-right font-semibold text-slate-900 dark:text-white" x-text="fmt.money(row.revenue)"></td>
               </tr>
             </template>
           </tbody>
@@ -122,9 +117,9 @@
     </div>
 
     {# --------------------------------------------- payment method split #}
-    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:col-span-2">
-      <h2 class="text-sm font-semibold text-slate-900 dark:text-white">How guests paid</h2>
-      <p class="text-xs text-slate-500">Settled payments by method</p>
+    <div class="card card-bd lg:col-span-2">
+      <h2 class="panel-title">How guests paid</h2>
+      <p class="panel-sub">Settled payments by method</p>
 
       <div class="relative mt-4 h-52">
         <div x-show="loading" class="skeleton absolute inset-0"></div>
@@ -136,7 +131,7 @@
           <p class="text-center text-xs text-slate-500">No payments recorded in this period.</p>
         </template>
         <template x-for="(m, i) in report?.payment_method_split || []" :key="m.label">
-          <div class="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+          <div class="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
             <span class="h-2.5 w-2.5 rounded-full" :style="`background:${METHOD_COLORS[i % METHOD_COLORS.length]}`"></span>
             <span class="text-xs text-slate-600 dark:text-slate-400" x-text="fmt.titleCase(m.label)"></span>
             <span class="ml-auto text-xs font-bold text-slate-900 dark:text-white" x-text="fmt.money(m.value)"></span>
@@ -151,7 +146,7 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
-const METHOD_COLORS = ['#1E3A8A', '#10B981', '#f59e0b', '#8b5cf6'];
+const METHOD_COLORS = ['#4338ca', '#10b981', '#f59e0b', '#8b5cf6'];
 
 function isoDaysAgo(days) {
   const d = new Date(window.APP.today);
@@ -234,8 +229,8 @@ function reportsPage() {
           datasets: [{
             data: this.report.revenue_series.map((p) => Number(p.value)),
             backgroundColor: t.brand,
-            hoverBackgroundColor: '#4f5fd7',
-            borderRadius: 4,
+            hoverBackgroundColor: '#6366f1',
+            borderRadius: 6,
             maxBarThickness: 28,
           }],
         },

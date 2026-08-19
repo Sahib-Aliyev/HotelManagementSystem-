@@ -1,19 +1,54 @@
-/* Small refinements on top of Tailwind. */
+/* Design tokens and the handful of refinements Tailwind utilities cannot express.
+ * Component classes (.card, .btn, .badge …) live in the Tailwind components
+ * layer inside base.html, so a utility on the element still wins over them. */
 
 [x-cloak] { display: none !important; }
 
-:root { color-scheme: light; }
-html.dark { color-scheme: dark; }
+:root {
+  color-scheme: light;
+
+  --brand: #4338ca;
+  --brand-soft: #6366f1;
+  --accent: #10b981;
+
+  --ring: rgba(99, 102, 241, 0.45);
+  --scroll-thumb: rgba(100, 116, 139, 0.32);
+  --scroll-thumb-hover: rgba(100, 116, 139, 0.55);
+}
+
+html.dark {
+  color-scheme: dark;
+  --scroll-thumb: rgba(148, 163, 184, 0.28);
+  --scroll-thumb-hover: rgba(148, 163, 184, 0.48);
+}
+
+html { scroll-behavior: smooth; }
+
+/* Inter reads noticeably tighter and more deliberate at display sizes. */
+h1, h2, .tracking-tight { letter-spacing: -0.011em; }
+
+::selection {
+  background: rgba(99, 102, 241, 0.22);
+  color: inherit;
+}
+
+/* Figures line up column-wise — a hotel screen is mostly money and counts. */
+table,
+.num,
+[data-num] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
 
 /* Softer, thinner scrollbars that match the surface they sit on. */
-* { scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, 0.35) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.35);
+  background: var(--scroll-thumb);
   border-radius: 9999px;
 }
-*::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.55); }
+*::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
 
 /* Loading skeleton — a slow sheen rather than a spinner. */
 .skeleton {
@@ -42,27 +77,89 @@ html.dark .skeleton::after {
   100% { transform: translateX(100%); }
 }
 
+/* Cards appear in a short cascade instead of all at once. */
+.stagger > * {
+  animation: fade-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > *:nth-child(2) { animation-delay: 0.05s; }
+.stagger > *:nth-child(3) { animation-delay: 0.1s; }
+.stagger > *:nth-child(4) { animation-delay: 0.15s; }
+.stagger > *:nth-child(5) { animation-delay: 0.2s; }
+.stagger > *:nth-child(6) { animation-delay: 0.25s; }
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The active sidebar item carries a short bar on its leading edge. */
+.nav-link-on::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 50%;
+  height: 1.25rem;
+  width: 3px;
+  border-radius: 9999px;
+  background: var(--brand);
+  transform: translateY(-50%);
+}
+html.dark .nav-link-on::before { background: var(--brand-soft); }
+
+/* A hairline of brand colour along the top edge of a highlighted panel. */
+.edge-top {
+  position: relative;
+  overflow: hidden;
+}
+.edge-top::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--brand), var(--brand-soft) 55%, var(--accent));
+  opacity: 0.9;
+}
+
+/* Consistent focus ring across native controls. */
+:where(input, select, textarea, button, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand-soft);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+/* Keyboard-only shortcut past the sidebar. */
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: -3rem;
+  z-index: 60;
+  border-radius: 0.75rem;
+  background: var(--brand);
+  color: #fff;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 1rem; }
+
+/* The room-status stripe on each room card. */
+.room-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.room-card:hover { transform: translateY(-2px); }
+
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   .skeleton::after { animation: none; }
+  .stagger > * { animation: none; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
 }
 
-/* Consistent focus ring across native controls. */
-:where(input, select, textarea, button, a):focus-visible {
-  outline: 2px solid #4f5fd7;
-  outline-offset: 2px;
-}
-
-/* The room-status stripe on each room card. */
-.room-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
-.room-card:hover { transform: translateY(-2px); }
-
 /* Print: invoices and folios only. */
 @media print {
   aside, header, footer, .no-print { display: none !important; }
   main { padding: 0 !important; }
   body { background: #fff !important; color: #000 !important; }
+  .card { border-color: #cbd5e1 !important; box-shadow: none !important; }
 }
