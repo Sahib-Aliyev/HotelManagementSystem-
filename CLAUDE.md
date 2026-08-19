@@ -135,8 +135,12 @@ long utility strings. Reuse it rather than hand-rolling a new card or button.
   rendered. Fine for a drawer the user is looking at; not fine for a menu whose
   hidden state has to be reliable, which is why the room-card menu has no
   transition.
-- **"Sleeps N" is a room, "N guest(s)" is a booking.** Capacity belongs to the
-  room type and never changes; the party size belongs to the stay. Printing one
+- **"Sleeps up to N" is a room, "N guest(s)" is a booking.** Capacity belongs to
+  the room type, is shared by every room of that type and does not follow the
+  booking — a Family Room sleeps up to 4 whether one guest or four are in it.
+  The party size belongs to the stay. The room card carries both, worded so they
+  cannot be swapped: "Sleeps up to 4" on the room line, "1 guest staying" on the
+  occupant line. Printing one
   in the other's words puts two different numbers for the same room on two
   screens — see "Fixed bugs". `settings.html` and `new_reservation.html` already
   used "Sleeps"/"sleeps"; keep to it.

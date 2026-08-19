@@ -114,11 +114,12 @@
 
           <p class="mt-2 text-xs text-slate-400">
             Floor <span x-text="entry.room.floor"></span> ·
-            {# "Sleeps N" is the room's capacity. "N guest(s)" is the size of a
-               party and belongs to a booking — this line used to print the
-               capacity in those words, so a family room read "4 guest(s)" while
-               the front desk read "1 guest(s)" for the stay inside it. #}
-            <span x-text="`Sleeps ${entry.room.room_type.capacity}`"></span> ·
+            {# The room's capacity, which comes from the room type and is the
+               same for every room of that type — "up to" because it is a
+               maximum, not the number of people currently in the room. That is
+               the line below, and reading one as the other is what made a
+               family room look like it held four guests. #}
+            <span x-text="`Sleeps up to ${entry.room.room_type.capacity}`"></span> ·
             <span class="font-semibold text-slate-600 dark:text-slate-300"
                   x-text="fmt.money(entry.room.room_type.base_price)"></span>
           </p>
@@ -128,7 +129,10 @@
               <div>
                 <p class="truncate text-xs font-semibold text-slate-800 dark:text-slate-100" x-text="entry.occupant.guest.full_name"></p>
                 <p class="truncate text-[11px] text-slate-500"
-                   x-text="`Out ${fmt.dateShort(entry.occupant.check_out_date)} · ${entry.occupant.adults + entry.occupant.children} guest(s)`"></p>
+                   x-text="(() => {
+                     const party = entry.occupant.adults + entry.occupant.children;
+                     return `Out ${fmt.dateShort(entry.occupant.check_out_date)} · ${party} guest${party === 1 ? '' : 's'} staying`;
+                   })()"></p>
                 <p class="truncate font-mono text-[10px] text-slate-400" x-text="entry.occupant.reference"></p>
                 <p x-show="fmt.daysOverdue(entry.occupant.check_out_date) > 0" style="display:none"
                    class="badge mt-1" :class="badgeClass('cancelled')"
