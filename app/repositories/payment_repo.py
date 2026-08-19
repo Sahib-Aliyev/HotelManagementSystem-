@@ -3,7 +3,7 @@
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, or_, select
 
 from app.models.invoice import Invoice
 from app.models.payment import Payment, PaymentStatus
@@ -17,6 +17,32 @@ def _day_bounds(day: date) -> tuple[datetime, datetime]:
     return start, end
 
 
+def is_cash_movement():
+    """Rows that moved money: a settled payment, or a refund counter-entry.
+
+    Refunds are append-only — the settled row keeps its PAID status and a new
+    REFUNDED row points back at it — so anything summing money has to count
+    both and give the refund a negative sign. Refunds recorded the old way (an
+    edit in place, no `refunded_payment_id`) are neither, which is why the
+    figures for historical data do not move.
+    """
+    return or_(
+        Payment.status == PaymentStatus.PAID,
+        and_(
+            Payment.status == PaymentStatus.REFUNDED,
+            Payment.refunded_payment_id.isnot(None),
+        ),
+    )
+
+
+def signed_amount():
+    """`amount`, negated for a refund counter-entry."""
+    return case(
+        (Payment.refunded_payment_id.isnot(None), -Payment.amount),
+        else_=Payment.amount,
+    )
+
+
 class PaymentRepository(BaseRepository[Payment]):
     model = Payment
 
@@ -28,12 +54,17 @@ class PaymentRepository(BaseRepository[Payment]):
         )
         return list((await self.db.execute(stmt)).scalars())
 
+    async def get_refund_for(self, payment_id: int) -> Payment | None:
+        """The counter-entry reversing a payment, if it has already been refunded."""
+        stmt = select(Payment).where(Payment.refunded_payment_id == payment_id)
+        return (await self.db.execute(stmt)).scalars().first()
+
     async def revenue_between(self, start: date, end: date) -> Decimal:
-        """Paid amounts with a paid_at inside [start, end] inclusive."""
+        """Money taken in [start, end] inclusive, refunds deducted."""
         start_dt, _ = _day_bounds(start)
         _, end_dt = _day_bounds(end)
-        stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(
-            Payment.status == PaymentStatus.PAID,
+        stmt = select(func.coalesce(func.sum(signed_amount()), 0)).where(
+            is_cash_movement(),
             Payment.paid_at >= start_dt,
             Payment.paid_at <= end_dt,
         )
@@ -43,9 +74,9 @@ class PaymentRepository(BaseRepository[Payment]):
         start_dt, _ = _day_bounds(start)
         _, end_dt = _day_bounds(end)
         stmt = (
-            select(Payment.paid_at, Payment.amount)
+            select(Payment.paid_at, signed_amount())
             .where(
-                Payment.status == PaymentStatus.PAID,
+                is_cash_movement(),
                 Payment.paid_at >= start_dt,
                 Payment.paid_at <= end_dt,
             )
@@ -62,9 +93,9 @@ class PaymentRepository(BaseRepository[Payment]):
         start_dt, _ = _day_bounds(start)
         _, end_dt = _day_bounds(end)
         stmt = (
-            select(Payment.method, func.coalesce(func.sum(Payment.amount), 0))
+            select(Payment.method, func.coalesce(func.sum(signed_amount()), 0))
             .where(
-                Payment.status == PaymentStatus.PAID,
+                is_cash_movement(),
                 Payment.paid_at >= start_dt,
                 Payment.paid_at <= end_dt,
             )

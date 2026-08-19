@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Enum as SAEnum, String
+from sqlalchemy import Boolean, Enum as SAEnum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, TimestampMixin
@@ -35,6 +35,11 @@ class User(Base, TimestampMixin):
     )
     phone: Mapped[str | None] = mapped_column(String(30))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Folded into every token as the `tv` claim and re-checked on each request,
+    # so bumping it (sign-out) invalidates tokens already issued.
+    token_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
 
     created_reservations: Mapped[list[Reservation]] = relationship(
         back_populates="created_by", foreign_keys="Reservation.created_by_id"

@@ -12,8 +12,8 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 
 
 @router.post("", response_model=PaymentRead, status_code=status.HTTP_201_CREATED)
-async def record_payment(payload: PaymentCreate, db: DbSession, _user: StaffUser):
-    return await PaymentService(db).record(payload)
+async def record_payment(payload: PaymentCreate, db: DbSession, user: StaffUser):
+    return await PaymentService(db).record(payload, acting_user=user)
 
 
 @router.get("/reservation/{reservation_id}", response_model=list[PaymentRead])
@@ -30,9 +30,11 @@ async def folio(reservation_id: int, db: DbSession, _user: StaffUser):
 
 @router.post("/{payment_id}/refund", response_model=PaymentRead)
 async def refund(
-    payment_id: int, db: DbSession, _manager: ManagerUser, note: str | None = None
+    payment_id: int, db: DbSession, manager: ManagerUser, note: str | None = None
 ):
-    return await PaymentService(db).refund(payment_id, note)
+    """Returns the refund counter-entry; the settled payment it reverses is
+    left untouched."""
+    return await PaymentService(db).refund(payment_id, note, acting_user=manager)
 
 
 # ------------------------------------------------------------------ invoices

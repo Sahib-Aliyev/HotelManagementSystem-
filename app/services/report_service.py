@@ -6,11 +6,16 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import ValidationError
-from app.models.payment import Payment, PaymentStatus
+from app.models.payment import Payment
 from app.models.reservation import BLOCKING_STATUSES, Reservation, ReservationStatus
 from app.models.room import Room, RoomStatus, RoomType
-from app.repositories.payment_repo import PaymentRepository
+from app.repositories.payment_repo import (
+    PaymentRepository,
+    is_cash_movement,
+    signed_amount,
+)
 from app.repositories.reservation_repo import ReservationRepository
 from app.repositories.room_repo import RoomRepository
 from app.schemas.report import (
@@ -73,13 +78,20 @@ class ReportService:
         )
 
     async def _outstanding_balance(self) -> Decimal:
-        """Unpaid portion of every reservation that is not cancelled."""
+        """Unpaid portion of every reservation that is not cancelled, VAT included.
+
+        `Reservation.total_price` is net of tax, so summing it against payments
+        under-reported what the hotel is owed by the whole VAT share and
+        disagreed with the folio of every single reservation. The multiplier
+        below is the aggregate form of `pricing.total_due()`.
+        """
+        vat_multiplier = Decimal("1") + Decimal(str(settings.TAX_RATE))
         paid_subq = (
             select(
                 Payment.reservation_id.label("rid"),
-                func.coalesce(func.sum(Payment.amount), 0).label("paid"),
+                func.coalesce(func.sum(signed_amount()), 0).label("paid"),
             )
-            .where(Payment.status == PaymentStatus.PAID)
+            .where(is_cash_movement())
             .group_by(Payment.reservation_id)
             .subquery()
         )
@@ -87,7 +99,8 @@ class ReportService:
             select(
                 func.coalesce(
                     func.sum(
-                        Reservation.total_price - func.coalesce(paid_subq.c.paid, 0)
+                        Reservation.total_price * vat_multiplier
+                        - func.coalesce(paid_subq.c.paid, 0)
                     ),
                     0,
                 )

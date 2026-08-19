@@ -126,7 +126,7 @@ class RoomService:
 
     async def delete_room(self, room_id: int) -> None:
         room = await self.get_room(room_id)
-        future = await self.reservations.upcoming_for_room(room_id, date.today())
+        future = await self.reservations.upcoming_for_room(room_id)
         if future is not None or await self.reservations.active_for_room(room_id):
             raise ConflictError(
                 "This room has current or upcoming reservations and cannot be deleted."
@@ -164,7 +164,6 @@ class RoomService:
 
     async def board(self) -> list[dict]:
         """Room grid for the rooms page: each room plus who is in it."""
-        today = date.today()
         rooms = await self.rooms.list_all()
         board: list[dict] = []
         for room in rooms:
@@ -172,7 +171,7 @@ class RoomService:
             upcoming = (
                 None
                 if occupant
-                else await self.reservations.upcoming_for_room(room.id, today)
+                else await self.reservations.upcoming_for_room(room.id)
             )
             board.append(
                 {

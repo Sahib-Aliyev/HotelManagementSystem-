@@ -6,10 +6,33 @@
 {% block content %}
 <div x-data="dashboard()" x-init="load()" class="space-y-6">
 
+  {# ------------------------------------------------------------- toolbar #}
+  <div class="flex flex-wrap items-center gap-3">
+    <p class="text-sm text-slate-500 dark:text-slate-400">
+      Here is how the house looks right now.
+    </p>
+    <div class="ml-auto flex items-center gap-2">
+      <span x-show="updatedAt" style="display:none"
+            class="hidden items-center gap-1.5 text-xs text-slate-400 sm:flex">
+        <span class="relative flex h-1.5 w-1.5">
+          <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-500 opacity-60"></span>
+          <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-500"></span>
+        </span>
+        Updated <span x-text="updatedAt"></span>
+      </span>
+      <button @click="refresh()" :disabled="loading" class="btn btn-outline btn-sm">
+        <svg class="h-3.5 w-3.5" :class="loading && 'animate-spin'" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M21 12a9 9 0 11-3.2-6.9M21 3v6h-6"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+
   {# ------------------------------------------------------------ KPI row #}
   <div x-show="loading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
     <template x-for="i in 4" :key="i">
-      <div class="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+      <div class="card card-bd">
         <div class="skeleton h-3 w-24"></div>
         <div class="skeleton mt-4 h-8 w-20"></div>
         <div class="skeleton mt-3 h-2 w-full"></div>
@@ -17,18 +40,17 @@
     </template>
   </div>
 
-  <div x-show="!loading" style="display:none" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <div x-show="!loading" style="display:none" class="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
     <template x-for="card in cards" :key="card.label">
-      <div class="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md
-                  dark:border-slate-800 dark:bg-slate-900">
-        <div class="flex items-start justify-between">
-          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500" x-text="card.label"></p>
-          <span class="grid h-8 w-8 place-items-center rounded-lg" :class="card.iconBg" x-html="card.icon"></span>
+      <div class="card card-lift card-bd">
+        <div class="flex items-start justify-between gap-3">
+          <p class="eyebrow" x-text="card.label"></p>
+          <span class="tile-icon" :class="card.iconBg" x-html="card.icon"></span>
         </div>
-        <p class="mt-3 text-3xl font-bold text-slate-900 dark:text-white" x-text="card.value"></p>
-        <p class="mt-1 text-xs text-slate-500" x-text="card.hint"></p>
-        <div x-show="card.bar !== undefined" class="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-          <div class="h-full rounded-full transition-all duration-700" :class="card.barColor"
+        <p class="stat-value mt-3" x-text="card.value"></p>
+        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400" x-text="card.hint"></p>
+        <div x-show="card.bar !== undefined" class="mt-3.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+          <div class="h-full rounded-full transition-all duration-700 ease-out" :class="card.barColor"
                :style="`width: ${Math.min(card.bar || 0, 100)}%`"></div>
         </div>
       </div>
@@ -37,36 +59,38 @@
 
   {# ------------------------------------------------------------- charts #}
   <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
-    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:col-span-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
+    <div class="card card-bd lg:col-span-3">
+      <div class="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Revenue, last 14 days</h2>
-          <p class="text-xs text-slate-500">Settled payments by the day they were taken</p>
+          <h2 class="panel-title">Revenue, last 14 days</h2>
+          <p class="panel-sub">Settled payments by the day they were taken</p>
         </div>
-        <span class="rounded-lg bg-accent-50 px-2.5 py-1 text-xs font-semibold text-accent-700
-                     dark:bg-accent-500/10 dark:text-accent-300"
+        <span class="badge bg-accent-50 text-accent-700 ring-accent-200
+                     dark:bg-accent-500/10 dark:text-accent-300 dark:ring-accent-500/30"
               x-text="revenueTotal"></span>
       </div>
-      <div class="relative mt-4 h-64">
+      <div class="relative mt-5 h-64">
         <div x-show="loading" class="skeleton absolute inset-0"></div>
         <canvas x-ref="revenueChart"></canvas>
       </div>
     </div>
 
-    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:col-span-2">
-      <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Room status right now</h2>
-      <p class="text-xs text-slate-500">Live housekeeping picture</p>
+    <div class="card card-bd lg:col-span-2">
+      <h2 class="panel-title">Room status right now</h2>
+      <p class="panel-sub">Live housekeeping picture</p>
       <div class="relative mt-4 h-48">
         <div x-show="loading" class="skeleton absolute inset-0"></div>
         <canvas x-ref="roomsChart"></canvas>
       </div>
       <div class="mt-4 grid grid-cols-2 gap-2">
         <template x-for="row in roomLegend" :key="row.label">
-          <div class="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-800/60">
+          <a :href="`/rooms?status=${row.key}`"
+             class="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2 transition
+                    hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800">
             <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="`background:${row.color}`"></span>
-            <span class="text-xs text-slate-600 dark:text-slate-400" x-text="row.label"></span>
+            <span class="truncate text-xs text-slate-600 dark:text-slate-400" x-text="row.label"></span>
             <span class="ml-auto text-xs font-bold text-slate-900 dark:text-white" x-text="row.value"></span>
-          </div>
+          </a>
         </template>
       </div>
     </div>
@@ -75,14 +99,15 @@
   {# --------------------------------------------------------- work lists #}
   <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
     <template x-for="list in lists" :key="list.key">
-      <div class="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+      <div class="card flex flex-col overflow-hidden">
+        <div class="card-hd">
           <div class="flex items-center gap-2.5">
             <span class="h-2 w-2 rounded-full" :class="list.dot"></span>
-            <h2 class="text-sm font-semibold text-slate-900 dark:text-white" x-text="list.title"></h2>
+            <h2 class="panel-title" x-text="list.title"></h2>
           </div>
-          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600
-                       dark:bg-slate-800 dark:text-slate-300" x-text="list.items.length"></span>
+          <span class="badge bg-slate-100 text-slate-600 ring-slate-200
+                       dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
+                x-text="list.items.length"></span>
         </div>
 
         <div class="flex-1 divide-y divide-slate-100 dark:divide-slate-800">
@@ -97,20 +122,23 @@
 
           <div x-show="!loading && list.items.length === 0" style="display:none">
             <div class="flex flex-col items-center justify-center px-5 py-10 text-center">
-              <div class="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 dark:bg-slate-800">
-                <svg class="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+              <div class="grid h-11 w-11 place-items-center rounded-2xl bg-accent-50 text-accent-600
+                          dark:bg-accent-500/10 dark:text-accent-300">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                   <path d="M20 6L9 17l-5-5"/>
                 </svg>
               </div>
-              <p class="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300" x-text="list.emptyTitle"></p>
+              <p class="mt-3 text-sm font-semibold text-slate-600 dark:text-slate-300" x-text="list.emptyTitle"></p>
               <p class="mt-1 text-xs text-slate-400" x-text="list.emptyBody"></p>
             </div>
           </div>
 
           <template x-for="r in list.items" :key="r.id">
             <div class="flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
-              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-xs font-bold
-                           text-brand-700 dark:bg-brand-700/20 dark:text-brand-200"
+              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-[11px] font-bold
+                           text-brand-700 ring-1 ring-inset ring-brand-200
+                           dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/30"
                     x-text="r.room.room_number"></span>
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium text-slate-900 dark:text-white" x-text="r.guest.full_name"></p>
@@ -119,25 +147,29 @@
                   <span x-text="`${r.nights}n`"></span> ·
                   <span x-text="fmt.money(r.total_price)"></span>
                 </p>
+                <p x-show="overdueText(r, list.key)" style="display:none"
+                   class="badge mt-1" :class="badgeClass('cancelled')"
+                   x-text="overdueText(r, list.key)"></p>
               </div>
               <div class="flex shrink-0 items-center gap-2">
-                <span class="hidden rounded-md px-2 py-0.5 text-[11px] font-semibold sm:inline"
-                      :class="badgeClass(r.status)" x-text="fmt.titleCase(r.status)"></span>
+                <span class="badge hidden sm:inline-flex" :class="badgeClass(r.status)">
+                  <span class="h-1.5 w-1.5 rounded-full" :class="dotClass(r.status)"></span>
+                  <span x-text="fmt.titleCase(r.status)"></span>
+                </span>
                 <button x-show="list.key === 'arrivals'" @click="checkIn(r)"
-                        class="rounded-lg bg-accent-500 px-2.5 py-1.5 text-xs font-semibold text-white
-                               transition hover:bg-accent-600">Check in</button>
+                        class="btn btn-accent btn-xs">Check in</button>
                 <button x-show="list.key === 'departures'" @click="goto(r)"
-                        class="rounded-lg bg-brand-700 px-2.5 py-1.5 text-xs font-semibold text-white
-                               transition hover:bg-brand-600">Check out</button>
+                        class="btn btn-primary btn-xs">Check out</button>
               </div>
             </div>
           </template>
         </div>
 
-        <a :href="list.href" class="border-t border-slate-100 px-5 py-3 text-xs font-semibold text-brand-600
-                                    transition hover:bg-slate-50 dark:border-slate-800 dark:text-brand-300
-                                    dark:hover:bg-slate-800/50">
-          <span x-text="list.cta"></span> →
+        <a :href="list.href"
+           class="card-ft flex items-center gap-1.5 text-xs font-semibold text-brand-600 transition
+                  hover:bg-slate-50 dark:text-brand-300 dark:hover:bg-slate-800/50">
+          <span x-text="list.cta"></span>
+          <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </a>
       </div>
     </template>
@@ -156,7 +188,7 @@ const ICONS = {
 };
 
 const ROOM_COLORS = {
-  available: '#10B981',
+  available: '#10b981',
   occupied: '#ef4444',
   cleaning: '#f59e0b',
   maintenance: '#94a3b8',
@@ -170,6 +202,7 @@ function dashboard() {
     cards: [],
     roomLegend: [],
     revenueTotal: '',
+    updatedAt: '',
     _charts: {},
 
     async load() {
@@ -186,6 +219,7 @@ function dashboard() {
         this.buildLegend(statusSummary);
 
         this.revenueTotal = fmt.money(trend.reduce((sum, p) => sum + Number(p.value), 0));
+        this.updatedAt = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
         this.loading = false;
 
         // Charts need the canvases visible, which happens once loading flips.
@@ -199,22 +233,29 @@ function dashboard() {
       }
     },
 
+    async refresh() {
+      this.loading = true;
+      await this.load();
+    },
+
     buildCards() {
       const s = this.stats;
       this.cards = [
         {
-          label: "Today's arrivals",
+          // "Due", not "today": the counts include arrivals and departures
+          // whose date has already passed, which used to be missing from both.
+          label: 'Arrivals due',
           value: s.arrivals_today,
           hint: `${s.departures_today} departure(s) due`,
           icon: ICONS.arrivals,
-          iconBg: 'bg-brand-50 text-brand-700 dark:bg-brand-700/20 dark:text-brand-200',
+          iconBg: 'bg-brand-50 text-brand-700 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/30',
         },
         {
           label: 'Occupancy',
           value: `${s.occupancy_rate}%`,
           hint: `${s.rooms_occupied} of ${s.rooms_total - s.rooms_out_of_service} sellable rooms`,
           icon: ICONS.occupancy,
-          iconBg: 'bg-accent-50 text-accent-600 dark:bg-accent-500/15 dark:text-accent-300',
+          iconBg: 'bg-accent-50 text-accent-600 ring-accent-200 dark:bg-accent-500/15 dark:text-accent-300 dark:ring-accent-500/30',
           bar: s.occupancy_rate,
           barColor: s.occupancy_rate > 85 ? 'bg-red-500' : s.occupancy_rate > 60 ? 'bg-accent-500' : 'bg-brand-500',
         },
@@ -223,7 +264,7 @@ function dashboard() {
           value: fmt.moneyShort(s.revenue_month),
           hint: `${fmt.money(s.revenue_today)} taken today`,
           icon: ICONS.revenue,
-          iconBg: 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300',
+          iconBg: 'bg-amber-50 text-amber-600 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30',
         },
         {
           label: 'In-house guests',
@@ -232,16 +273,25 @@ function dashboard() {
             ? `${fmt.money(s.outstanding_balance)} outstanding`
             : 'All accounts settled',
           icon: ICONS.guests,
-          iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-500/15 dark:text-purple-300',
+          iconBg: 'bg-purple-50 text-purple-600 ring-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:ring-purple-500/30',
         },
       ];
+    },
+
+    // Overdue arrivals and departures are on these lists now rather than
+    // silently missing from them, so they have to be labelled as such.
+    overdueText(reservation, listKey) {
+      const iso = listKey === 'arrivals'
+        ? reservation.check_in_date
+        : reservation.check_out_date;
+      return fmt.overdueLabel(iso);
     },
 
     buildLists(payload) {
       this.lists = [
         {
           key: 'arrivals',
-          title: 'Arrivals today',
+          title: 'Arrivals due',
           items: payload.arrivals,
           dot: 'bg-brand-500',
           emptyTitle: 'No arrivals today',
@@ -251,7 +301,7 @@ function dashboard() {
         },
         {
           key: 'departures',
-          title: 'Departures today',
+          title: 'Departures due',
           items: payload.departures,
           dot: 'bg-amber-500',
           emptyTitle: 'No departures today',
@@ -274,6 +324,7 @@ function dashboard() {
 
     buildLegend(summary) {
       this.roomLegend = Object.entries(summary).map(([key, value]) => ({
+        key,
         label: fmt.titleCase(key),
         value,
         color: ROOM_COLORS[key] || '#94a3b8',
@@ -287,8 +338,8 @@ function dashboard() {
       this._charts.revenue?.destroy();
 
       const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 240);
-      gradient.addColorStop(0, 'rgba(30,58,138,0.28)');
-      gradient.addColorStop(1, 'rgba(30,58,138,0.00)');
+      gradient.addColorStop(0, t.brandSoft);
+      gradient.addColorStop(1, 'rgba(67,56,202,0)');
 
       this._charts.revenue = new Chart(ctx, {
         type: 'line',
@@ -302,6 +353,8 @@ function dashboard() {
             pointRadius: 0,
             pointHoverRadius: 5,
             pointHoverBackgroundColor: t.brand,
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 2,
             fill: true,
             tension: 0.35,
           }],
@@ -309,6 +362,7 @@ function dashboard() {
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -317,12 +371,12 @@ function dashboard() {
             },
           },
           scales: {
-            x: { grid: { display: false }, ticks: { color: t.text, font: { size: 11 }, maxRotation: 0, autoSkipPadding: 12 } },
+            x: { grid: { display: false }, ticks: { color: t.text, maxRotation: 0, autoSkipPadding: 12 } },
             y: {
               beginAtZero: true,
               grid: { color: t.grid, drawTicks: false },
               border: { display: false },
-              ticks: { color: t.text, font: { size: 11 }, callback: (v) => fmt.moneyShort(v) },
+              ticks: { color: t.text, callback: (v) => fmt.moneyShort(v) },
             },
           },
         },
@@ -344,13 +398,14 @@ function dashboard() {
             data: entries.map(([, v]) => v),
             backgroundColor: entries.map(([k]) => ROOM_COLORS[k] || '#94a3b8'),
             borderWidth: 0,
-            hoverOffset: 6,
+            hoverOffset: 8,
+            spacing: 2,
           }],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          cutout: '68%',
+          cutout: '70%',
           plugins: {
             legend: { display: false },
             tooltip: { callbacks: { label: (c) => `${c.label}: ${c.parsed} room(s)` } },
@@ -363,8 +418,7 @@ function dashboard() {
       try {
         await api(`/api/v1/reservations/${reservation.id}/check-in`, { method: 'POST' });
         toastSuccess('Checked in', `${reservation.guest.full_name} → room ${reservation.room.room_number}`);
-        this.loading = true;
-        await this.load();
+        await this.refresh();
       } catch (err) {
         toastError('Check-in failed', err.message);
       }

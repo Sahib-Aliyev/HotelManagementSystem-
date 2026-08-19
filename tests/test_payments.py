@@ -133,3 +133,100 @@ async def test_a_payment_for_more_than_the_vat_inclusive_total_is_rejected(
         },
     )
     assert overpaid.status_code == 422
+
+
+async def test_the_dashboard_reports_the_vat_inclusive_amount_owed(
+    reception_client, seeded
+):
+    """The dashboard aggregate was the fourth site computing money owed from
+    `total_price`, which is net of tax — so it disagreed with the folio of
+    every reservation by exactly the VAT share."""
+    reservation = await _book_and_check_in(
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,  # 150.00 x 3 nights = 450.00
+    )
+    expected = Decimal("450.00") * Decimal("1.18")
+
+    reservation_view = await reception_client.get(
+        f"/api/v1/reservations/{reservation['id']}"
+    )
+    assert Decimal(reservation_view.json()["balance_due"]) == expected
+
+    dashboard = await reception_client.get("/api/v1/reports/dashboard")
+    assert Decimal(dashboard.json()["stats"]["outstanding_balance"]) == expected
+
+
+async def test_a_refund_is_a_counter_entry_and_leaves_the_original_intact(
+    reception_client, seeded
+):
+    """Refunding used to overwrite the settled payment: its status, its note,
+    and every trace that money had ever been received. A manager could pocket
+    cash and leave the guest showing as unpaid."""
+    reservation = await _book_and_check_in(
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+    )
+    reservation_id = reservation["id"]
+
+    taken = await reception_client.post(
+        "/api/v1/payments",
+        json={
+            "reservation_id": reservation_id,
+            "amount": "100.00",
+            "method": "cash",
+            "note": "cash taken at desk",
+        },
+    )
+    assert taken.status_code == 201
+    payment_id = taken.json()["id"]
+
+    await reception_client.post(
+        "/api/v1/auth/login",
+        json={"email": "manager@test.az", "password": "Manager1234"},
+    )
+    refunded = await reception_client.post(
+        f"/api/v1/payments/{payment_id}/refund", params={"note": "erased"}
+    )
+    assert refunded.status_code == 201 or refunded.status_code == 200
+    counter_entry = refunded.json()
+    assert counter_entry["id"] != payment_id
+    assert counter_entry["refunded_payment_id"] == payment_id
+    assert counter_entry["status"] == "refunded"
+
+    rows = await reception_client.get(f"/api/v1/payments/reservation/{reservation_id}")
+    original = next(r for r in rows.json() if r["id"] == payment_id)
+    assert original["status"] == "paid", "the settled payment must not be edited"
+    assert original["note"] == "cash taken at desk"
+    assert Decimal(original["amount"]) == Decimal("100.00")
+
+    # The refund still has to reduce what the guest has paid.
+    folio = await reception_client.get(f"/api/v1/payments/folio/{reservation_id}")
+    assert Decimal(folio.json()["amount_paid"]) == Decimal("0.00")
+
+    again = await reception_client.post(f"/api/v1/payments/{payment_id}/refund")
+    assert again.status_code == 409, "one payment cannot be refunded twice"
+
+
+async def test_a_pending_payment_cannot_exceed_the_balance_either(
+    reception_client, seeded
+):
+    """The overpayment ceiling was gated on `status == paid`, and `status` is
+    client-settable — so any amount went through as "pending"."""
+    reservation = await _book_and_check_in(
+        reception_client,
+        guest_id=seeded["guests"][0].id,
+        room_id=seeded["rooms"][1].id,
+    )
+
+    absurd = await reception_client.post(
+        "/api/v1/payments",
+        json={
+            "reservation_id": reservation["id"],
+            "amount": "99999999.99",
+            "method": "cash",
+            "status": "pending",
+        },
+    )
+    assert absurd.status_code == 422

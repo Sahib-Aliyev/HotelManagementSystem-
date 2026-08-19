@@ -83,8 +83,14 @@ class InvoiceService:
         return invoice
 
     async def render_pdf(self, reservation_id: int) -> tuple[bytes, str]:
-        """Build the invoice PDF. Returns (pdf_bytes, filename)."""
-        invoice = await self.issue(reservation_id)
+        """Render an already-issued invoice. Returns (pdf_bytes, filename).
+
+        Read-only on purpose. This used to call `issue()`, so a GET wrote a row
+        and consumed an invoice number — and because the session cookie is
+        samesite=lax, a link mailed to a staff member was enough to trigger it.
+        Issuing stays behind the explicit POST.
+        """
+        invoice = await self.get_for_reservation(reservation_id)
         reservation = await self.reservations.get_full(reservation_id)
         folio = await self.payments.folio(reservation_id)
 

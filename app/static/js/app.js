@@ -7,10 +7,21 @@ function toast(title, body = '', type = 'info') {
 const toastSuccess = (t, b) => toast(t, b, 'success');
 const toastError = (t, b) => toast(t, b, 'error');
 
+// A <template x-if> nested inside an <svg> has no .content — SVG is foreign
+// content to the HTML parser — so the icon is picked by binding :d instead.
+const TOAST_PATHS = {
+  success: 'M20 6L9 17l-5-5',
+  error: 'M12 8v5m0 3h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z',
+  info: 'M12 16v-4m0-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+};
+
 function toastHost() {
   return {
     items: [],
     seq: 0,
+    iconPath(type) {
+      return TOAST_PATHS[type] || TOAST_PATHS.info;
+    },
     push(detail) {
       const id = ++this.seq;
       this.items.push({ id, ...detail });
@@ -97,28 +108,62 @@ const fmt = {
     d.setDate(d.getDate() + days);
     return d.toISOString().slice(0, 10);
   },
+  // Whole days that a date is already in the past, 0 if it is today or later.
+  // Drives the "overdue" badges: an overdue departure or an arrival that never
+  // showed up used to be indistinguishable from a normal one.
+  daysOverdue(iso) {
+    if (!iso) return 0;
+    return Math.max(0, fmt.nightsBetween(iso, window.APP.today));
+  },
+  overdueLabel(iso) {
+    const days = fmt.daysOverdue(iso);
+    if (!days) return '';
+    return days === 1 ? '1 day overdue' : `${days} days overdue`;
+  },
 };
 
-/* ------------------------------------------------------------ status badges */
-const STATUS_STYLES = {
-  // reservation
-  pending: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
-  confirmed: 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300',
-  checked_in: 'bg-accent-100 text-accent-700 dark:bg-accent-500/15 dark:text-accent-300',
-  checked_out: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
-  cancelled: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
-  no_show: 'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300',
-  // room
-  available: 'bg-accent-100 text-accent-700 dark:bg-accent-500/15 dark:text-accent-300',
-  occupied: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
-  cleaning: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
-  maintenance: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-  // payment
-  paid: 'bg-accent-100 text-accent-700 dark:bg-accent-500/15 dark:text-accent-300',
-  refunded: 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300',
-  failed: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+/* ------------------------------------------------------------ status badges
+ * Tinted fill + a hairline inset ring, which keeps the pills legible on both
+ * white cards and dark surfaces. Pair with the .badge component class.
+ */
+const TONES = {
+  amber:  'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30',
+  blue:   'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/30',
+  green:  'bg-accent-50 text-accent-700 ring-accent-200 dark:bg-accent-500/10 dark:text-accent-300 dark:ring-accent-500/30',
+  slate:  'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-700/50 dark:text-slate-300 dark:ring-slate-600',
+  red:    'bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/30',
+  orange: 'bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-500/10 dark:text-orange-300 dark:ring-orange-500/30',
+  purple: 'bg-purple-50 text-purple-700 ring-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:ring-purple-500/30',
+  brand:  'bg-brand-50 text-brand-700 ring-brand-200 dark:bg-brand-500/10 dark:text-brand-200 dark:ring-brand-500/30',
 };
-const badgeClass = (status) => STATUS_STYLES[status] || STATUS_STYLES.checked_out;
+
+const DOTS = {
+  amber: 'bg-amber-500', blue: 'bg-blue-500', green: 'bg-accent-500', slate: 'bg-slate-400',
+  red: 'bg-red-500', orange: 'bg-orange-500', purple: 'bg-purple-500', brand: 'bg-brand-500',
+};
+
+const STATUS_TONES = {
+  // reservation
+  pending: 'amber',
+  confirmed: 'blue',
+  checked_in: 'green',
+  checked_out: 'slate',
+  cancelled: 'red',
+  no_show: 'orange',
+  // room
+  available: 'green',
+  occupied: 'red',
+  cleaning: 'amber',
+  maintenance: 'slate',
+  // payment
+  paid: 'green',
+  refunded: 'purple',
+  failed: 'red',
+};
+
+const tone = (status) => STATUS_TONES[status] || 'slate';
+const badgeClass = (status) => TONES[tone(status)];
+const dotClass = (status) => DOTS[tone(status)];
 
 /* --------------------------------------------------------- app shell (nav) */
 function shell() {
@@ -176,15 +221,51 @@ function confirmMixin() {
   };
 }
 
+/* ------------------------------------------------------------------ invoices
+ * The PDF route is read-only: it renders an invoice that has been issued and
+ * 404s otherwise, so that a GET (which a mailed link can trigger, cookie and
+ * all) can never create a row or consume an invoice number. Issuing is this
+ * explicit POST. The tab is opened first, inside the click, or the browser
+ * treats the later window.open as a pop-up and blocks it.
+ */
+async function openInvoicePdf(reservationId) {
+  const tab = window.open('', '_blank');
+  try {
+    await api(`/api/v1/invoices/reservation/${reservationId}`, { method: 'POST' });
+    const url = `/api/v1/invoices/reservation/${reservationId}/pdf`;
+    if (tab) tab.location = url;
+    else window.location.href = url;
+  } catch (err) {
+    if (tab) tab.close();
+    toastError('Could not open the invoice', err.message);
+  }
+}
+
 /* --------------------------------------------------------- chart defaults */
 function chartTheme() {
   const dark = document.documentElement.classList.contains('dark');
+
+  // Charts inherit the page's typography and tooltip styling once, here, so
+  // every canvas on every page reads as part of the same interface.
+  if (window.Chart) {
+    Chart.defaults.font.family = "'Inter', ui-sans-serif, system-ui, sans-serif";
+    Chart.defaults.font.size = 11;
+    Chart.defaults.color = dark ? '#94a3b8' : '#64748b';
+    Chart.defaults.plugins.tooltip.backgroundColor = dark ? '#1e293b' : '#0f172a';
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.cornerRadius = 10;
+    Chart.defaults.plugins.tooltip.titleFont = { weight: '600', size: 11 };
+    Chart.defaults.plugins.tooltip.boxPadding = 4;
+    Chart.defaults.plugins.tooltip.borderColor = dark ? '#334155' : 'transparent';
+    Chart.defaults.plugins.tooltip.borderWidth = dark ? 1 : 0;
+  }
+
   return {
-    grid: dark ? 'rgba(148,163,184,0.15)' : 'rgba(100,116,139,0.15)',
+    grid: dark ? 'rgba(148,163,184,0.14)' : 'rgba(100,116,139,0.13)',
     text: dark ? '#94a3b8' : '#64748b',
-    brand: '#1E3A8A',
-    brandSoft: dark ? 'rgba(99,102,241,0.35)' : 'rgba(30,58,138,0.12)',
-    accent: '#10B981',
+    brand: dark ? '#818cf8' : '#4338ca',
+    brandSoft: dark ? 'rgba(129,140,248,0.32)' : 'rgba(67,56,202,0.16)',
+    accent: '#10b981',
     accentSoft: dark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.15)',
   };
 }
@@ -196,6 +277,8 @@ window.toastHost = toastHost;
 window.api = api;
 window.fmt = fmt;
 window.badgeClass = badgeClass;
+window.dotClass = dotClass;
 window.shell = shell;
 window.confirmMixin = confirmMixin;
+window.openInvoicePdf = openInvoicePdf;
 window.chartTheme = chartTheme;

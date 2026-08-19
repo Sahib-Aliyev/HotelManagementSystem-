@@ -36,6 +36,32 @@ The login screen has one-click buttons for each of these.
 
 ---
 
+## Where the project stands
+
+Two security audits and one functional review have been through this code. As of
+**2026-08-19** everything they found is fixed, each with a regression test.
+
+| Question | Where it is answered |
+| --- | --- |
+| What is fixed, and what broke in the first place | "Fixed bugs" in [`CLAUDE.md`](CLAUDE.md) |
+| What is still open on security | [`SECURITY-TODO.md`](SECURITY-TODO.md) |
+| What is still open functionally | [`BUGS-TODO.md`](BUGS-TODO.md) |
+| The rules this code must not break | "Conventions" and "Security rules" in [`CLAUDE.md`](CLAUDE.md) |
+| How a change came to be | `git log` — the history is part of the documentation |
+
+Everything written down here — documentation, commit messages, code comments —
+is in English. Commits before 2026-08-19 are in Azerbaijani; that is history,
+not the convention.
+
+The short version of what is left: the CSP still needs `unsafe-inline` and
+`unsafe-eval` until Tailwind, Alpine and Chart.js are vendored with a build
+step; rate limiting counts in one process until `RATE_LIMIT_STORAGE_URI` points
+at Redis; there is no audit trail for ordinary edits and no two-factor
+authentication; and the pre-deployment checklist in `SECURITY-TODO.md` is
+configuration nobody can do for you.
+
+---
+
 ## What it does
 
 **Front desk**
@@ -88,7 +114,16 @@ modification, excluding the reservation being edited so moving a booking's dates
 doesn't clash with itself.
 
 Only `pending`, `confirmed` and `checked_in` block the calendar. Cancelling
-frees the room immediately.
+frees the room immediately — but cancelling a stay that is already **checked in**
+is a manager action, and it is refused while the guest still owes money unless
+the manager writes the balance off explicitly. Cancelling an in-house stay
+removes its nights from occupancy and its debt from the ledger, so it cannot be
+a quiet front-desk shortcut.
+
+A booking whose dates have passed without a check-in, and a guest whose
+check-out date has passed, both still hold their room. Neither is hidden: the
+front desk, the dashboard, the rooms board and the reservations list all show
+them, labelled with how many days overdue they are.
 
 There is a test for every overlap shape — see
 [`tests/test_reservations.py`](tests/test_reservations.py).
@@ -113,7 +148,7 @@ app/
 └── main.py          app assembly, middleware, error handlers
 
 alembic/             migrations
-tests/               77 tests covering auth, security, booking rules, money, lifecycle
+tests/               98 tests covering auth, security, booking rules, money, lifecycle
 seed.py              demo hotel: 28 rooms, 15 guests, 175 reservations
 ```
 
@@ -150,10 +185,14 @@ POST   /api/v1/reservations                      book (409 on any clash)
 POST   /api/v1/reservations/walk-in              register guest + book at once
 GET    /api/v1/reservations/front-desk           today's arrivals/departures/in-house
 POST   /api/v1/reservations/{id}/check-in
-POST   /api/v1/reservations/{id}/check-out       ?allow_outstanding_balance=true
+POST   /api/v1/reservations/{id}/check-out       ?allow_outstanding_balance=true (manager+, recorded)
+POST   /api/v1/reservations/{id}/cancel          manager+ once the guest is checked in
+POST   /api/v1/reservations/{id}/no-show         manager+; resolves a booking nobody arrived for
 POST   /api/v1/payments                          take money
+POST   /api/v1/payments/{id}/refund              manager+; writes a counter-entry, never edits the original
 GET    /api/v1/payments/folio/{id}               itemised bill
-GET    /api/v1/invoices/reservation/{id}/pdf     invoice PDF
+POST   /api/v1/invoices/reservation/{id}         issue the invoice (this is the write)
+GET    /api/v1/invoices/reservation/{id}/pdf     render an issued invoice (404 if none — a GET never writes)
 GET    /api/v1/reports/summary                   ?start=&end=  (manager+)
 ```
 
@@ -173,15 +212,24 @@ Errors are uniform, so the frontend renders them without special cases:
 python -m pytest
 ```
 
-77 tests: authentication and role boundaries, every overlap shape, capacity and
+98 tests: authentication and role boundaries, every overlap shape, capacity and
 date validation, the full check-in → pay → check-out lifecycle, VAT and balance
 arithmetic, invoice idempotency, guest document rules. Each test runs against a
-fresh in-memory SQLite database.
+fresh in-memory SQLite database. The suite takes a few minutes — bcrypt is
+deliberately slow, and most tests sign in.
 
 `tests/test_security.py` and `tests/test_config.py` are regression tests for the
-2026-08 security audit — rate limiting, privilege escalation on the rate
-override, session invalidation on password change, last-admin lockout, password
-policy, security headers, and the production configuration guard.
+2026-08 security audit and the 2026-08-17 review — rate limiting and the
+per-account lockout, privilege escalation on the rate override, session
+invalidation on password change *and* on sign-out, last-admin lockout, password
+policy, security headers, the production configuration guard, the recorded
+manager waiver, guest deletion with financial history, and the read-only invoice
+PDF route.
+
+`tests/test_payments.py` covers the money arithmetic that has been wrong twice:
+VAT is part of what the guest owes, the dashboard's outstanding balance agrees
+with the folio, a refund leaves the payment it reverses on the record, and the
+overpayment ceiling applies whatever status the client sends.
 
 ---
 
@@ -226,8 +274,11 @@ Everything lives in `.env` (see `.env.example`). The values worth knowing:
 | --- | --- | --- |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./hotel.db` | `postgresql+asyncpg://…` for Postgres |
 | `SECRET_KEY` | dev placeholder | **must** change for production |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `720` | session length |
-| `TAX_RATE` | `0.18` | VAT on invoices |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `720` | session length; signing out revokes the token before this |
+| `RATE_LIMIT_STORAGE_URI` | `memory://` | per-process — point at `redis://…` with more than one worker |
+| `ACCOUNT_LOCK_AFTER_FAILURES` | `10` | consecutive failed logins before the account is locked |
+| `ACCOUNT_LOCK_MINUTES` | `15` | how long that lock lasts |
+| `TAX_RATE` | `0.18` | VAT on invoices — part of what the guest owes, not an extra |
 | `CURRENCY` | `AZN` | shown throughout the UI and on invoices |
 
 Generate a real key:
@@ -243,11 +294,28 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 - Passwords hashed with bcrypt; the 72-byte bcrypt limit is rejected explicitly
   rather than silently truncated
 - JWT in an httpOnly, SameSite=Lax cookie (`Secure` when `APP_ENV=production`)
-- Login errors are identical for unknown email and wrong password, so the
-  endpoint can't be used to enumerate accounts
-- All queries go through the ORM — no string-built SQL
-- `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` on every response
-- The last active administrator cannot be deactivated
+- Login errors are identical for unknown email and wrong password — and both
+  pay for one bcrypt round, so response time does not leak which addresses exist
+- Sign-in is rate limited per IP and locked per account after repeated failures;
+  a locked account answers exactly like a wrong password
+- Sessions are revocable: tokens carry a fingerprint of the password hash and a
+  token version, so changing a password or signing out invalidates tokens that
+  have not expired yet
+- Money is authorised in the service layer, not in the UI: overriding a nightly
+  rate, checking a guest out with a balance owing, and cancelling an in-house
+  stay all require a manager, and any balance given up is recorded against the
+  reservation with the amount, the time and the manager
+- Payments are append-only — a refund is a counter-entry pointing at the
+  settled payment, which is never edited, so the record of cash received cannot
+  be erased
+- A GET never writes: the invoice PDF route renders an invoice that has been
+  issued and 404s otherwise, because a `SameSite=Lax` cookie travels with a
+  mailed link
+- All queries go through the ORM — no string-built SQL, and search terms have
+  their LIKE wildcards escaped
+- `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, a CSP and
+  `Cache-Control: no-store` on every non-static response
+- The last active administrator cannot be deactivated or demoted
 
 Before going live: change `SECRET_KEY`, set `APP_ENV=production`, put it behind
 HTTPS, and replace the seeded demo accounts.

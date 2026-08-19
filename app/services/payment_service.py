@@ -9,6 +9,7 @@ from app.core.database import utcnow
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.payment import Payment, PaymentStatus
 from app.models.reservation import ReservationStatus
+from app.models.user import User
 from app.repositories.payment_repo import PaymentRepository
 from app.repositories.reservation_repo import ReservationRepository
 from app.schemas.payment import Folio, FolioLine, PaymentCreate
@@ -26,7 +27,9 @@ class PaymentService:
     async def list_for_reservation(self, reservation_id: int) -> list[Payment]:
         return await self.payments.list_for_reservation(reservation_id)
 
-    async def record(self, payload: PaymentCreate) -> Payment:
+    async def record(
+        self, payload: PaymentCreate, *, acting_user: User | None = None
+    ) -> Payment:
         reservation = await self.reservations.get_full(payload.reservation_id)
         if reservation is None:
             raise NotFoundError("Reservation not found.")
@@ -35,7 +38,10 @@ class PaymentService:
 
         paid = await self.reservations.amount_paid(reservation.id)
         outstanding = (total_due(reservation) - paid).quantize(CENTS)
-        if payload.status == PaymentStatus.PAID and payload.amount > outstanding:
+        # The ceiling applies whatever the status: `status` is client-settable,
+        # so gating it on PAID let any amount through as "pending" and only
+        # Numeric(10, 2) overflow stopped it.
+        if payload.amount > outstanding:
             raise ValidationError(
                 f"Payment of {payload.amount} exceeds the outstanding balance "
                 f"of {outstanding}.",
@@ -50,21 +56,46 @@ class PaymentService:
             reference=payload.reference,
             note=payload.note,
             paid_at=utcnow() if payload.status == PaymentStatus.PAID else None,
+            recorded_by_id=acting_user.id if acting_user else None,
         )
         await self.db.commit()
         return payment
 
-    async def refund(self, payment_id: int, note: str | None = None) -> Payment:
+    async def refund(
+        self,
+        payment_id: int,
+        note: str | None = None,
+        *,
+        acting_user: User | None = None,
+    ) -> Payment:
+        """Reverse a settled payment by writing a counter-entry.
+
+        The settled row is left exactly as it was. Editing it in place used to
+        erase the amount, the original note and any trace that a refund had
+        happened at all, so a cash payment could be taken and then made to look
+        as though the guest had never paid.
+        """
         payment = await self.payments.get(payment_id)
         if payment is None:
             raise NotFoundError("Payment not found.")
         if payment.status != PaymentStatus.PAID:
             raise ConflictError("Only a settled payment can be refunded.")
-        payment.status = PaymentStatus.REFUNDED
-        payment.note = note or payment.note
+        if await self.payments.get_refund_for(payment.id) is not None:
+            raise ConflictError("This payment has already been refunded.")
+
+        refund = await self.payments.create(
+            reservation_id=payment.reservation_id,
+            amount=payment.amount,
+            method=payment.method,
+            status=PaymentStatus.REFUNDED,
+            reference=payment.reference,
+            note=note,
+            paid_at=utcnow(),
+            refunded_payment_id=payment.id,
+            recorded_by_id=acting_user.id if acting_user else None,
+        )
         await self.db.commit()
-        await self.db.refresh(payment)
-        return payment
+        return refund
 
     async def folio(self, reservation_id: int) -> Folio:
         """The itemised bill for a stay."""

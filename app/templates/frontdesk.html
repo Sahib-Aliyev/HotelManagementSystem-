@@ -8,7 +8,7 @@
 <div x-data="frontDesk()" x-init="load()" class="space-y-5">
 
   {# ------------------------------------------------------- lookup bar #}
-  <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+  <div class="card card-bd">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div class="relative flex-1">
         <svg class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
@@ -16,22 +16,27 @@
           <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>
         </svg>
         <input type="search" x-model.debounce.350ms="query" @input="search()"
-               placeholder="Booking reference, guest name, phone or room number…"
-               class="w-full rounded-xl border-slate-300 bg-white pl-10 pr-3 py-2.5 text-sm shadow-sm
-                      focus:border-brand-500 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+               placeholder="Booking reference, guest name, phone or room number…" class="input pl-10">
+        <svg x-show="searching" style="display:none"
+             class="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400"
+             fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+        </svg>
       </div>
-      <a href="/reservations/new"
-         class="flex items-center justify-center gap-2 rounded-xl bg-accent-500 px-4 py-2.5 text-sm
-                font-semibold text-white transition hover:bg-accent-600">
+      <a href="/reservations/new" class="btn btn-accent">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
         Walk-in booking
       </a>
     </div>
 
-    <div x-show="results.length" style="display:none" class="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+    <div x-show="results.length" style="display:none"
+         class="mt-3 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
       <template x-for="r in results" :key="r.id">
-        <button @click="select(r)" class="flex w-full items-center gap-3 px-1 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
-          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-xs font-bold
+        <button @click="select(r)"
+                class="flex w-full items-center gap-3 border-b border-slate-100 px-3 py-2.5 text-left
+                       transition last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
+          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-[11px] font-bold
                        text-slate-600 dark:bg-slate-800 dark:text-slate-300" x-text="r.room.room_number"></span>
           <span class="min-w-0 flex-1">
             <span class="block truncate text-sm font-medium text-slate-900 dark:text-white" x-text="r.guest.full_name"></span>
@@ -40,8 +45,10 @@
               <span x-text="`${fmt.dateShort(r.check_in_date)} → ${fmt.dateShort(r.check_out_date)}`"></span>
             </span>
           </span>
-          <span class="rounded-md px-2 py-0.5 text-[11px] font-semibold" :class="badgeClass(r.status)"
-                x-text="fmt.titleCase(r.status)"></span>
+          <span class="badge" :class="badgeClass(r.status)">
+            <span class="h-1.5 w-1.5 rounded-full" :class="dotClass(r.status)"></span>
+            <span x-text="fmt.titleCase(r.status)"></span>
+          </span>
         </button>
       </template>
     </div>
@@ -51,16 +58,16 @@
   </div>
 
   {# ------------------------------------------------------ three columns #}
-  <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+  <div class="stagger grid grid-cols-1 gap-4 xl:grid-cols-3">
     <template x-for="col in columns" :key="col.key">
-      <section class="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <header class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+      <section class="card relative flex flex-col overflow-hidden">
+        <span class="absolute inset-x-0 top-0 h-[3px]" :class="col.edge"></span>
+        <header class="card-hd">
           <div>
-            <h2 class="text-sm font-semibold text-slate-900 dark:text-white" x-text="col.title"></h2>
-            <p class="text-xs text-slate-500" x-text="col.subtitle"></p>
+            <h2 class="panel-title" x-text="col.title"></h2>
+            <p class="panel-sub" x-text="col.subtitle"></p>
           </div>
-          <span class="grid h-8 min-w-8 place-items-center rounded-lg px-2 text-sm font-bold"
-                :class="col.badge" x-text="col.items.length"></span>
+          <span class="badge px-2.5 py-1 text-xs" :class="col.badge" x-text="col.items.length"></span>
         </header>
 
         <div class="flex-1 divide-y divide-slate-100 dark:divide-slate-800">
@@ -75,8 +82,8 @@
 
           <div x-show="!loading && !col.items.length" style="display:none"
                class="flex flex-col items-center px-5 py-12 text-center">
-            <div class="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 dark:bg-slate-800">
-              <span x-html="col.emptyIcon" class="text-slate-400"></span>
+            <div class="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
+              <span x-html="col.emptyIcon"></span>
             </div>
             <p class="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300" x-text="col.emptyTitle"></p>
             <p class="mt-1 max-w-[22ch] text-xs text-slate-400" x-text="col.emptyBody"></p>
@@ -86,7 +93,9 @@
             <article class="px-5 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
               <div class="flex items-start gap-3">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-sm font-bold
-                             text-brand-700 dark:bg-brand-700/20 dark:text-brand-200" x-text="r.room.room_number"></span>
+                             text-brand-700 ring-1 ring-inset ring-brand-200
+                             dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/30"
+                      x-text="r.room.room_number"></span>
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-semibold text-slate-900 dark:text-white" x-text="r.guest.full_name"></p>
                   <p class="mt-0.5 truncate text-xs text-slate-500">
@@ -95,33 +104,40 @@
                     <span x-text="`${r.nights} night(s)`"></span>
                   </p>
                   <p class="mt-1 truncate font-mono text-[11px] text-slate-400" x-text="r.reference"></p>
+                  <p x-show="overdueText(r, col.key)" style="display:none"
+                     class="badge mt-1.5" :class="badgeClass('cancelled')">
+                    <span class="h-1.5 w-1.5 rounded-full" :class="dotClass('cancelled')"></span>
+                    <span x-text="overdueText(r, col.key)"></span>
+                  </p>
                   <p x-show="r.special_requests" style="display:none"
-                     class="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800
-                            dark:bg-amber-500/10 dark:text-amber-200" x-text="r.special_requests"></p>
+                     class="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px]
+                            text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+                    <svg class="mt-px h-3 w-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span x-text="r.special_requests"></span>
+                  </p>
                 </div>
                 <span class="shrink-0 text-right">
-                  <span class="block text-sm font-bold text-slate-900 dark:text-white" x-text="fmt.money(r.total_price)"></span>
-                  <span class="mt-1 inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold"
-                        :class="badgeClass(r.status)" x-text="fmt.titleCase(r.status)"></span>
+                  <span class="num block text-sm font-bold text-slate-900 dark:text-white" x-text="fmt.money(r.total_price)"></span>
+                  <span class="badge mt-1.5" :class="badgeClass(r.status)">
+                    <span class="h-1.5 w-1.5 rounded-full" :class="dotClass(r.status)"></span>
+                    <span x-text="fmt.titleCase(r.status)"></span>
+                  </span>
                 </span>
               </div>
 
               <div class="mt-3 flex flex-wrap gap-2">
                 <button x-show="col.key === 'arrivals'" @click="doCheckIn(r)" :disabled="busy === r.id"
-                        class="flex-1 rounded-lg bg-accent-500 px-3 py-2 text-xs font-semibold text-white
-                               transition hover:bg-accent-600 disabled:opacity-50">
+                        class="btn btn-accent btn-sm flex-1">
                   <span x-text="busy === r.id ? 'Checking in…' : 'Check in'"></span>
                 </button>
                 <button x-show="col.key === 'departures' || col.key === 'in_house'" @click="openFolio(r)"
-                        class="flex-1 rounded-lg bg-brand-700 px-3 py-2 text-xs font-semibold text-white
-                               transition hover:bg-brand-600">Check out</button>
-                <button @click="openFolio(r)"
-                        class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600
-                               transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300
-                               dark:hover:bg-slate-800">Folio</button>
-                <button x-show="col.key === 'arrivals'" @click="cancel(r)"
-                        class="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600
-                               transition hover:bg-red-50 dark:border-red-500/30 dark:hover:bg-red-500/10">Cancel</button>
+                        class="btn btn-primary btn-sm flex-1">Check out</button>
+                <button @click="openFolio(r)" class="btn btn-outline btn-sm">Folio</button>
+                <button x-show="col.key === 'arrivals' && fmt.daysOverdue(r.check_in_date) > 0 && isManager"
+                        @click="markNoShow(r)" class="btn btn-outline btn-sm">No show</button>
+                <button x-show="col.key === 'arrivals'" @click="cancel(r)" class="btn btn-danger btn-sm">Cancel</button>
               </div>
             </article>
           </template>
@@ -131,19 +147,25 @@
   </div>
 
   {# --------------------------------------------------------- folio drawer #}
-  <div x-show="folio.open" style="display:none" class="fixed inset-0 z-40 flex justify-end">
+  <div x-show="folio.open" style="display:none" class="fixed inset-0 z-40 flex justify-end"
+       @keydown.escape.window="folio.open = false">
     <div @click="folio.open = false" x-transition.opacity class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
 
     <aside x-transition:enter="transition duration-200" x-transition:enter-start="translate-x-full"
-           x-transition:enter-end="translate-x-0"
-           class="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl dark:bg-slate-900">
+           x-transition:enter-end="translate-x-0" role="dialog" aria-modal="true"
+           class="relative flex h-full w-full max-w-md flex-col bg-white shadow-pop dark:bg-slate-900">
       <header class="flex items-start justify-between border-b border-slate-200 p-5 dark:border-slate-800">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Guest folio</p>
-          <h2 class="mt-1 text-lg font-bold text-slate-900 dark:text-white" x-text="folio.data.guest_name || '—'"></h2>
+          <p class="eyebrow">Guest folio</p>
+          <h2 class="mt-1 text-lg font-bold tracking-tight text-slate-900 dark:text-white" x-text="folio.data.guest_name || '—'"></h2>
           <p class="font-mono text-xs text-slate-400" x-text="folio.data.reservation_reference"></p>
+          <p x-show="folio.reservation && folio.reservation.waived_amount" style="display:none"
+             class="badge mt-1.5" :class="badgeClass('cancelled')"
+             x-text="folio.reservation
+               ? `${fmt.money(folio.reservation.waived_amount)} written off · ${fmt.date(folio.reservation.waived_at)}`
+               : ''"></p>
         </div>
-        <button @click="folio.open = false" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+        <button @click="folio.open = false" aria-label="Close" class="btn-icon">
           <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </header>
@@ -161,12 +183,12 @@
                   <p class="truncate text-sm font-medium text-slate-800 dark:text-slate-200" x-text="line.label"></p>
                   <p class="text-xs text-slate-500" x-text="line.detail"></p>
                 </div>
-                <span class="shrink-0 text-sm font-semibold text-slate-900 dark:text-white" x-text="fmt.money(line.amount)"></span>
+                <span class="num shrink-0 text-sm font-semibold text-slate-900 dark:text-white" x-text="fmt.money(line.amount)"></span>
               </div>
             </template>
           </div>
 
-          <dl class="space-y-2 border-t border-slate-200 pt-4 text-sm dark:border-slate-800">
+          <dl class="num space-y-2 border-t border-slate-200 pt-4 text-sm dark:border-slate-800">
             <div class="flex justify-between"><dt class="text-slate-500">Subtotal</dt>
               <dd class="font-medium text-slate-900 dark:text-white" x-text="fmt.money(folio.data.subtotal)"></dd></div>
             <div class="flex justify-between"><dt class="text-slate-500" x-text="`VAT (${(window.APP.taxRate*100).toFixed(0)}%)`"></dt>
@@ -176,43 +198,46 @@
               <dd class="font-bold text-slate-900 dark:text-white" x-text="fmt.money(folio.data.total)"></dd></div>
             <div class="flex justify-between"><dt class="text-slate-500">Paid</dt>
               <dd class="font-medium text-accent-600 dark:text-accent-300" x-text="`− ${fmt.money(folio.data.amount_paid)}`"></dd></div>
-            <div class="flex justify-between rounded-xl px-3 py-2.5"
+            <div class="mt-1 flex items-center justify-between rounded-xl px-3 py-3 ring-1 ring-inset"
                  :class="Number(folio.data.balance_due) > 0
-                   ? 'bg-red-50 dark:bg-red-500/10' : 'bg-accent-50 dark:bg-accent-500/10'">
+                   ? 'bg-red-50 ring-red-200 dark:bg-red-500/10 dark:ring-red-500/30'
+                   : 'bg-accent-50 ring-accent-200 dark:bg-accent-500/10 dark:ring-accent-500/30'">
               <dt class="font-semibold" :class="Number(folio.data.balance_due) > 0 ? 'text-red-700 dark:text-red-300' : 'text-accent-700 dark:text-accent-300'">Balance due</dt>
-              <dd class="font-bold" :class="Number(folio.data.balance_due) > 0 ? 'text-red-700 dark:text-red-300' : 'text-accent-700 dark:text-accent-300'"
+              <dd class="text-base font-bold" :class="Number(folio.data.balance_due) > 0 ? 'text-red-700 dark:text-red-300' : 'text-accent-700 dark:text-accent-300'"
                   x-text="fmt.money(folio.data.balance_due)"></dd></div>
           </dl>
 
           {# take payment #}
           <div x-show="Number(folio.data.balance_due) > 0" style="display:none"
-               class="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+               class="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
             <p class="text-sm font-semibold text-slate-900 dark:text-white">Take payment</p>
             <div class="mt-3 grid grid-cols-2 gap-2">
               <input type="number" step="0.01" min="0.01" x-model="payment.amount" placeholder="Amount"
-                     class="rounded-lg border-slate-300 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
-              <select x-model="payment.method"
-                      class="rounded-lg border-slate-300 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+                     aria-label="Amount" class="input input-sm">
+              <select x-model="payment.method" aria-label="Method" class="input input-sm">
                 <option value="cash">Cash</option><option value="card">Card</option>
                 <option value="transfer">Transfer</option><option value="online">Online</option>
               </select>
             </div>
-            <button @click="takePayment()" :disabled="payment.busy"
-                    class="mt-3 w-full rounded-lg bg-accent-500 py-2 text-sm font-semibold text-white
-                           transition hover:bg-accent-600 disabled:opacity-50">
+            <div class="mt-2 flex flex-wrap gap-1.5">
+              <button @click="payment.amount = Number(folio.data.balance_due).toFixed(2)" class="chip">Full balance</button>
+              <button @click="payment.amount = (Number(folio.data.balance_due) / 2).toFixed(2)" class="chip">Half</button>
+            </div>
+            <button @click="takePayment()" :disabled="payment.busy" class="btn btn-accent btn-sm mt-3 w-full">
               <span x-text="payment.busy ? 'Recording…' : 'Record payment'"></span>
             </button>
           </div>
 
           <div x-show="folio.payments.length" style="display:none">
-            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Payment history</p>
+            <p class="eyebrow">Payment history</p>
             <div class="mt-2 space-y-1.5">
               <template x-for="p in folio.payments" :key="p.id">
-                <div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-800/60">
-                  <span class="text-slate-600 dark:text-slate-300" x-text="`${fmt.titleCase(p.method)} · ${fmt.date(p.paid_at || p.created_at)}`"></span>
-                  <span class="flex items-center gap-2">
-                    <span class="rounded px-1.5 py-0.5 font-semibold" :class="badgeClass(p.status)" x-text="fmt.titleCase(p.status)"></span>
-                    <span class="font-semibold text-slate-900 dark:text-white" x-text="fmt.money(p.amount)"></span>
+                <div class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-800/60">
+                  <span class="truncate text-slate-600 dark:text-slate-300"
+                        x-text="`${fmt.titleCase(p.method)} · ${fmt.date(p.paid_at || p.created_at)}`"></span>
+                  <span class="flex shrink-0 items-center gap-2">
+                    <span class="badge px-2 py-0.5" :class="badgeClass(p.status)" x-text="fmt.titleCase(p.status)"></span>
+                    <span class="num font-semibold text-slate-900 dark:text-white" x-text="fmt.money(p.amount)"></span>
                   </span>
                 </div>
               </template>
@@ -222,15 +247,15 @@
       </div>
 
       <footer class="grid grid-cols-2 gap-2 border-t border-slate-200 p-5 dark:border-slate-800">
-        <a :href="`/api/v1/invoices/reservation/${folio.reservationId}/pdf`" target="_blank"
-           class="rounded-xl border border-slate-300 px-4 py-2.5 text-center text-sm font-semibold text-slate-700
-                  transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+        <button type="button" @click="openInvoicePdf(folio.reservationId)" class="btn btn-outline">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path d="M14 3v5h5M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/>
+          </svg>
           Invoice PDF
-        </a>
+        </button>
         <button @click="doCheckOut()" :disabled="folio.busy"
                 x-show="folio.reservation && folio.reservation.status === 'checked_in'"
-                class="rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white transition
-                       hover:bg-brand-600 disabled:opacity-50">
+                class="btn btn-primary">
           <span x-text="folio.busy ? 'Checking out…' : 'Check out'"></span>
         </button>
       </footer>
@@ -266,20 +291,23 @@ function frontDesk() {
         const board = await api('/api/v1/reservations/front-desk');
         this.columns = [
           {
-            key: 'arrivals', title: 'Expected arrivals', subtitle: 'Due to check in today',
-            items: board.arrivals, badge: 'bg-brand-50 text-brand-700 dark:bg-brand-700/20 dark:text-brand-200',
+            key: 'arrivals', title: 'Expected arrivals', subtitle: 'Due today, oldest first',
+            items: board.arrivals, edge: 'bg-brand-500',
+            badge: 'bg-brand-50 text-brand-700 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/30',
             emptyIcon: EMPTY_ICONS.arrivals, emptyTitle: 'No arrivals today',
-            emptyBody: 'Nothing is booked to start today.',
+            emptyBody: 'Nothing is booked to start today, and nothing is unresolved.',
           },
           {
-            key: 'departures', title: 'Departures', subtitle: 'Checking out today',
-            items: board.departures, badge: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+            key: 'departures', title: 'Departures', subtitle: 'Due out today, most overdue first',
+            items: board.departures, edge: 'bg-amber-500',
+            badge: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30',
             emptyIcon: EMPTY_ICONS.departures, emptyTitle: 'No departures today',
-            emptyBody: 'All in-house guests are staying on.',
+            emptyBody: 'Nobody is due out, and nobody has overstayed.',
           },
           {
             key: 'in_house', title: 'In house', subtitle: 'Currently staying', items: board.in_house,
-            badge: 'bg-accent-50 text-accent-700 dark:bg-accent-500/15 dark:text-accent-300',
+            edge: 'bg-accent-500',
+            badge: 'bg-accent-50 text-accent-700 ring-accent-200 dark:bg-accent-500/15 dark:text-accent-300 dark:ring-accent-500/30',
             emptyIcon: EMPTY_ICONS.in_house, emptyTitle: 'No guests in house',
             emptyBody: 'The hotel is empty right now.',
           },
@@ -329,6 +357,35 @@ function frontDesk() {
         toastError('Check-in failed', err.message);
       } finally {
         this.busy = null;
+      }
+    },
+
+    isManager: window.APP.isManager,
+
+    // Arrivals overdue on their check-in date, departures on their check-out.
+    // Both used to be filtered out of the board by an exact date match, so
+    // nothing on this screen distinguished "today" from "last week".
+    overdueText(reservation, columnKey) {
+      const iso = columnKey === 'arrivals'
+        ? reservation.check_in_date
+        : reservation.check_out_date;
+      return fmt.overdueLabel(iso);
+    },
+
+    async markNoShow(reservation) {
+      const ok = await this.askConfirm(
+        'Mark this booking as a no-show?',
+        `${reservation.guest.full_name} never arrived for ${fmt.date(reservation.check_in_date)}. `
+        + 'This releases room ' + reservation.room.room_number + ' for other bookings.',
+        { confirmLabel: 'Mark no-show' }
+      );
+      if (!ok) return;
+      try {
+        await api(`/api/v1/reservations/${reservation.id}/no-show`, { method: 'POST' });
+        toastSuccess('Marked as a no-show', reservation.reference);
+        await this.load();
+      } catch (err) {
+        toastError('Could not mark the no-show', err.message);
       }
     },
 
@@ -391,10 +448,19 @@ function frontDesk() {
       let allowOutstanding = false;
 
       if (balance > 0) {
+        // Writing a balance off is a manager decision and the server enforces
+        // it, so say so here instead of sending a request that will 403.
+        if (!this.isManager) {
+          toastError(
+            'A manager has to approve this',
+            `${fmt.money(balance)} is still owed. Take the payment, or ask a manager to check out with a balance.`
+          );
+          return;
+        }
         const ok = await this.askConfirm(
           'Check out with a balance?',
-          `${fmt.money(balance)} is still owed. Continuing leaves the account open.`,
-          { confirmLabel: 'Check out anyway' }
+          `${fmt.money(balance)} is still owed. It will be recorded as written off, against your name.`,
+          { confirmLabel: 'Write it off and check out' }
         );
         if (!ok) return;
         allowOutstanding = true;

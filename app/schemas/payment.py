@@ -26,6 +26,8 @@ class PaymentRead(ORMModel):
     status: PaymentStatus
     reference: str | None
     note: str | None
+    #: Set on a refund row; points at the settled payment it reverses.
+    refunded_payment_id: int | None
     paid_at: datetime | None
     created_at: datetime
 

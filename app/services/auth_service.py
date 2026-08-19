@@ -10,6 +10,7 @@ from app.core.exceptions import (
     PermissionDeniedError,
     ValidationError,
 )
+from app.core.ratelimit import failed_logins
 from app.core.security import (
     create_access_token,
     hash_password,
@@ -28,6 +29,14 @@ class AuthService:
         self.users = UserRepository(db)
 
     async def authenticate(self, email: str, password: str) -> User:
+        key = email.strip().lower()
+        # A locked address answers exactly like a wrong password, and pays the
+        # same bcrypt round, so the lockout cannot be used to discover which
+        # addresses are registered.
+        if failed_logins.is_locked(key):
+            waste_password_time()
+            raise AuthenticationError("Incorrect email or password.")
+
         user = await self.users.get_by_email(email)
         # Same message either way so the response cannot be used to probe
         # which email addresses exist. The unknown-account branch still pays
@@ -35,18 +44,26 @@ class AuthService:
         # the shared message is hiding.
         if user is None:
             waste_password_time()
+            failed_logins.record_failure(key)
             raise AuthenticationError("Incorrect email or password.")
         if not verify_password(password, user.hashed_password):
+            failed_logins.record_failure(key)
             raise AuthenticationError("Incorrect email or password.")
         if not user.is_active:
             raise PermissionDeniedError("This account has been deactivated.")
+        failed_logins.reset(key)
         return user
 
     def issue_token(self, user: User) -> TokenResponse:
         token = create_access_token(
             subject=user.id,
             role=user.role.value,
-            extra_claims={"pwf": password_fingerprint(user.hashed_password)},
+            extra_claims={
+                "pwf": password_fingerprint(user.hashed_password),
+                # Checked on every request, so signing out can invalidate a
+                # token that has not expired yet.
+                "tv": user.token_version,
+            },
         )
         return TokenResponse(
             access_token=token,
@@ -130,6 +147,17 @@ class AuthService:
         # Changing the hash changes the token fingerprint, so every session
         # issued under the old password stops working on its next request.
         user.hashed_password = hash_password(new_password)
+        await self.db.commit()
+
+    async def revoke_sessions(self, user: User) -> None:
+        """Invalidate every token already issued to this user.
+
+        Deleting the cookie is not signing out: the JWT stays valid for its
+        full lifetime and `Authorization: Bearer` accepts it, so anything that
+        captured it once kept access for hours after the "sign out". Bumping
+        the version breaks the `tv` claim every existing token carries.
+        """
+        user.token_version = (user.token_version or 0) + 1
         await self.db.commit()
 
     async def deactivate(self, user_id: int, acting_user: User) -> User:

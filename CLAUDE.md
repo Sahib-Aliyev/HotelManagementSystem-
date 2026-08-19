@@ -49,7 +49,61 @@ The layer order is fixed: `routers/api` → `services` → `repositories` → SQ
   it is net of tax. What the guest actually owes is
   `app/services/pricing.py::total_due()`, which adds VAT. Using
   `total_price` alone lets a guest check out having paid the room charge but
-  never the tax — see "Fixed bugs".
+  never the tax — see "Fixed bugs". The dashboard aggregate in
+  `ReportService._outstanding_balance` is the same rule in SQL form.
+- **Payments are append-only.** A refund is a new `Payment` row with
+  `refunded_payment_id` pointing at the settled row it reverses; the settled
+  row is never edited. Anything that sums money therefore has to go through
+  `is_cash_movement()` and `signed_amount()` in
+  `app/repositories/payment_repo.py`, which count a counter-entry as negative.
+  Filtering on `status == PAID` alone silently ignores every refund.
+- **Money the hotel gives up is written down.** Both paths that forgive a
+  balance — check-out with `allow_outstanding_balance`, and cancelling a stay
+  that is already checked in — require a manager and record
+  `waived_amount` / `waived_at` / `waived_by_id` on the reservation
+  (`ReservationService._record_waiver`). A new way to forgive money must do
+  the same.
+- **A schema field typed `X | None` is optional on input, not nullable.** An
+  explicit JSON `null` survives `model_dump(exclude_unset=True)`, so the
+  services drop `None` values before merging them (`NULLABLE_UPDATE_FIELDS` in
+  `reservation_service.py` and `guest_service.py` list the fields that really
+  can be cleared). Without that, `null` reaches the arithmetic or a NOT NULL
+  column and becomes a 500.
+
+## Frontend design system
+
+The templates share one vocabulary of component classes instead of repeating
+long utility strings. Reuse it rather than hand-rolling a new card or button.
+
+- The classes live in the `<style type="text/tailwindcss">` block in
+  `base.html`, inside `@layer components`, so the Tailwind CDN compiles them
+  into its own sheet and a utility written on the element still wins over the
+  component default. `.card`, `.card-hd`, `.card-bd`, `.card-ft`, `.card-lift`,
+  `.btn` (+ `.btn-primary` / `.btn-accent` / `.btn-outline` / `.btn-ghost` /
+  `.btn-danger` / `.btn-solid-danger`, sized with `.btn-sm` / `.btn-xs`),
+  `.btn-icon`, `.input` (+ `.input-sm` / `.input-error`), `.field`, `.hint`,
+  `.error-text`, `.badge`, `.chip` (+ `.chip-on`), `.tbl`, `.nav-link`
+  (+ `.nav-link-on`), `.panel-title`, `.panel-sub`, `.eyebrow`, `.tile-icon`,
+  `.stat-value`.
+- `app/static/css/app.css` holds only what utilities cannot express: design
+  tokens, tabular figures, the skeleton sheen, the `.stagger` cascade, the
+  active-nav indicator, `.edge-top`, the focus ring, the skip link and print
+  rules. **`@apply` does not work there** — that file is served as a static
+  asset and Tailwind never sees it.
+- `brand` is a single coherent indigo ramp and `accent` a full emerald ramp.
+  Do not introduce a one-off hex; if a new tint is needed, add the step to the
+  ramp in `base.html`.
+- Status colours come from `badgeClass(status)` and `dotClass(status)` in
+  `app.js`, which map a status to one of the shared tones. Add new statuses to
+  `STATUS_TONES`, never to a template.
+- Chart styling is centralised in `chartTheme()`, which also sets the Chart.js
+  defaults (font, tooltip). Read colours from it instead of hard-coding them.
+- `/static` is cache-busted with `?v={{ asset_version }}`, derived from the
+  mtimes of `app.css` and `app.js` in `app/routers/web.py`. Any new static
+  asset referenced from a template should carry the same query.
+- **A `<template x-if>` inside an `<svg>` silently breaks Alpine** — SVG is
+  foreign content, so the element has no `.content` and Alpine throws on
+  `cloneNode`. Bind the shape instead (`<path :d="…">`), as the toast host does.
 
 ## Security rules
 
@@ -77,22 +131,55 @@ These came out of the security audit. Breaking one breaks a test in
 - **Administrator count**: deactivating or demoting the last active admin is
   blocked in `AuthService`. Both `deactivate()` and `update_user()` can reach
   that state, so the guard exists in both.
+- **Tokens also carry a `tv` claim** — the user's `token_version`, bumped by
+  `AuthService.revoke_sessions()` on logout and verified in `deps.py`. Without
+  it, "sign out" only deleted the cookie while the JWT stayed valid for its
+  full lifetime (and `Authorization: Bearer` accepts it). Keep both `pwf` and
+  `tv` when adding claims.
+- **Rules that `create` enforces have to hold on `PATCH` too.** The stay range
+  lives in one place, `schemas/reservation.py::stay_range_error`, used by
+  `ReservationCreate`, `QuickBookingCreate` and `ReservationService.update`.
+  PATCH re-derives the dates and re-prices from them, so an unguarded PATCH
+  reaches every rule create protects.
+- **A GET must not write.** The session cookie is `samesite="lax"`, so a
+  top-level GET navigation from anywhere carries it — a mailed link is enough.
+  `render_pdf()` therefore reads an issued invoice and 404s otherwise; issuing
+  is the explicit POST.
+- **Every `ge`/ceiling check must be status-independent** where the status
+  comes from the client. `PaymentCreate.status` is client-settable, so gating
+  the overpayment ceiling on `status == PAID` let any amount through as
+  `pending`.
 
 ## Known limitations
 
-Open security work and the pre-deployment checklist live in a separate file:
-**`SECURITY-TODO.md`**. What follows is limitations that are deliberately
+Open work lives in two separate files: **`SECURITY-TODO.md`** (security findings
+and the pre-deployment checklist) and **`BUGS-TODO.md`** (functional defects that
+are not security issues). What follows is limitations that are deliberately
 accepted.
 
 - No email notifications, and only a single currency (`CURRENCY` in `.env`).
 - The CSP still allows `unsafe-inline` and `unsafe-eval`, because Tailwind,
   Alpine and Chart.js load from CDNs and Tailwind compiles styles in the
   browser. Vendoring those three files is what allows a strict CSP.
-- Rate limiting is per-IP and in-memory: behind a proxy the real client IP must
-  be forwarded, and more than one instance needs shared storage such as Redis.
-- No audit log — apart from `created_by_id`, who changed a reservation is not
-  recorded.
+- Rate limiting is per-IP with a per-account lockout on top
+  (`ACCOUNT_LOCK_AFTER_FAILURES`), and defaults to in-memory storage: behind a
+  proxy the real client IP must be forwarded, and more than one instance needs
+  `RATE_LIMIT_STORAGE_URI` pointed at Redis. The per-account counter is
+  in-process too, with the same caveat.
+- No audit log. Who took a payment (`recorded_by_id`), who refunded it (the
+  counter-entry's `recorded_by_id`), who created a reservation
+  (`created_by_id`) and who waived a balance (`waived_by_id`) are recorded, but
+  there is no before/after trail for ordinary edits — a price change or a date
+  change is not attributed to anyone.
 - No two-factor authentication.
+
+## Language rule
+
+**Everything written down in this repository is in English** — without
+exception. That covers every `*.md` file (this one, `README.md`,
+`SECURITY-TODO.md`, `BUGS-TODO.md`), every commit message, and every comment
+and docstring in the code. Commits before `2026-08-19` are in Azerbaijani;
+that is history, not a precedent — do not add more.
 
 ## Git / commit rule
 
@@ -101,11 +188,15 @@ accepted.
   "fix bug" is not enough.
 - Format: a short summary on the first line, a blank line, then bullets with
   the reasoning and details.
-- The goal: someone reading the history later (Sahib or Claude) should
-  understand what was done and why from the message alone, without re-reading
-  the code.
-- Commit messages themselves stay in Azerbaijani, matching the existing
-  history. Documentation (`*.md`) is written in English.
+- **The history is documentation.** When picking this project up — reading
+  CLAUDE.md and the two TODO files to understand where it stands — read the
+  commit log as well (`git log`, and `git log -p <file>` for anything
+  surprising). The `*.md` files say what is true now; the commits say how it
+  got there and what was rejected on the way. Anyone, Sahib or Claude, should
+  be able to understand a change from its message alone, without re-reading the
+  diff.
+- Push to `origin` (GitHub) once the tests pass, so the remote history is the
+  same documentation the local one is.
 
 ## Fixed bugs (for the record)
 
@@ -120,6 +211,18 @@ accepted.
   order).
 - ~~The `next` parameter on login was an open-redirect risk~~ — only relative
   paths starting with `/` (and not `//`) are accepted now.
+- ~~Toast notifications never drew an icon~~ — the icon was chosen with three
+  `<template x-if>` elements nested inside the `<svg>`. SVG is foreign content
+  to the HTML parser, so those templates have no `.content` and Alpine threw
+  `Cannot read properties of undefined (reading 'cloneNode')` on every page
+  load. The host now binds `<path :d="iconPath(t.type)">`.
+- ~~The settings page advertised an 8-character password policy~~ — the real
+  rule in `app/schemas/auth.py` is 10 characters plus upper case, lower case
+  and a digit, so a valid-looking password was rejected by the server. The page
+  now shows a live checklist mirroring `_strong_enough()`.
+- ~~Editing the CSS or JS did not reach the browser~~ — `/static` is served
+  with a long cache and the templates linked the files without a version, so a
+  stale `app.css` could persist. Both now carry `?v={{ asset_version }}`.
 
 ### Security audit (2026-08)
 
@@ -159,6 +262,88 @@ accepted.
   differ from the current one.
 - ~~`python-jose 3.3.0`~~ — CVE-2024-33663 and CVE-2024-33664; upgraded to
   3.4.0.
+
+### Review of 2026-08-17 (closed 2026-08-19)
+
+Every item section 2 of `SECURITY-TODO.md` listed, plus both functional bugs
+from `BUGS-TODO.md`. Regression tests: `tests/test_reservations.py`,
+`tests/test_payments.py`, `tests/test_security.py`.
+
+- ~~`PATCH /reservations/{id}` skipped every date rule `create` enforces~~ —
+  `ReservationUpdate` had no range validator and `update()` checked only
+  `check_out > check_in`, so `{"check_out_date": "9999-12-31"}` returned 200
+  with `nights: 2912213`. That took the room off sale until the year 9999 (every
+  later booking failed `_assert_room_free` with no explanation in the UI) and
+  re-priced the stay at 291,221,300.00 — past `Numeric(10, 2)`, which SQLite
+  stores silently and PostgreSQL rejects mid-transaction as a 500. Backdating
+  worked the same way and fed fabricated nights into occupancy and ADR. The
+  rule now lives once in `stay_range_error()`, `update()` re-asserts
+  "check-in not in the past" when the arrival date changes, and `_price()`
+  refuses a total above the column's ceiling.
+- ~~The dashboard's `outstanding_balance` was computed net of VAT~~ — the
+  fourth call site of the bug fixed in `d0f8edc`, and the one number management
+  reads to decide whether the ledger balances. It disagreed with the folio of
+  every reservation by exactly the tax share.
+- ~~The login open redirect was still reachable with a backslash~~ — the fix
+  recorded above only rejected a literal `//` prefix. Per the WHATWG URL spec a
+  backslash in the authority position of an http(s) URL is treated as a slash,
+  so `?next=/\evil.example` resolved to `http://evil.example/` in Chrome,
+  Firefox and Safari — a phishing page reached through a genuine, successful
+  login. `login.html` now resolves the value against `location.origin` and
+  compares origins instead of prefix-matching.
+- ~~A receptionist could cancel a checked-in stay and erase the debt~~ —
+  `cancel()` treated `CHECKED_IN` as an ordinary case. Cancelling removed the
+  nights from occupancy and ADR, removed the money owed from the dashboard, and
+  made `PaymentService.record` refuse payment afterwards, so the debt could not
+  be collected even once someone noticed. It now needs a manager, and refuses
+  outright while a balance is owed unless the manager passes `waive_balance`,
+  which is recorded.
+- ~~A refund overwrote the payment it reversed~~ — `refund()` set
+  `status = REFUNDED` and replaced `note`, so the amount, the original note and
+  any trace that a refund had happened were gone; a manager could take cash and
+  leave the guest showing as unpaid. Refunds are counter-entries now
+  (`refunded_payment_id`), the settled row is untouched, refunding twice is a
+  409, and every money sum reads `is_cash_movement()` / `signed_amount()`.
+- ~~`DELETE /guests/{id}` always returned 500, and the obvious fix was a trap~~
+  — `Guest.reservations` is lazy-loaded, so touching it raised
+  `MissingGreenlet`, which is not an `AppError` and bypassed the exception
+  handlers. Fixing only the crash would have been worse: the guard blocked only
+  *active* reservations while the relationship cascades to payments and
+  invoices, so a manager could have wiped a guest's whole financial history in
+  one request. Reservations are counted through the repository now and any
+  reservation at all blocks the delete.
+- ~~An explicit JSON `null` in `PATCH /reservations/{id}` was a 500~~ — see the
+  `X | None` convention above.
+- ~~`GET /invoices/reservation/{id}/pdf` wrote to the database~~ — it called
+  `issue()`, so a GET created the invoice row and consumed a number from the
+  sequence, froze a stale subtotal, and could be triggered by a link mailed to
+  a staff member (the cookie is `samesite=lax`). The route is read-only now;
+  the UI issues through `openInvoicePdf()` in `app.js`, which POSTs first.
+- ~~Non-`PAID` payments bypassed the overpayment cap~~ — `99999999.99` as
+  `pending` was accepted with no relation to what was owed.
+- ~~`allow_outstanding_balance` was a receptionist-level, unrecorded waiver~~ —
+  the VAT fix made the balance correct; this query parameter made paying it
+  optional for the lowest role. Manager-only and recorded now, and the folio
+  drawer says so instead of sending a request that will 403.
+- ~~Logout did not revoke the token~~ — see the `tv` claim above.
+- ~~An overdue guest disappeared from the front desk~~ — `departures_on()` and
+  `arrivals_on()` matched the date exactly, so a stay whose check-out date had
+  passed matched no day and appeared in no column, and a booking that never
+  arrived fell out of every view while its room stayed blocked. That is how
+  room 502 ended up with two simultaneous `checked_in` reservations. Both are
+  `<=` now and ordered most-overdue-first; `upcoming_for_room()` dropped its
+  `check_in_date >= today` filter so the rooms board stops describing a blocked
+  room as free; and the dashboard, front desk, rooms and reservations screens
+  all label how many days overdue something is
+  (`fmt.overdueLabel`). Overdue arrivals get a manager-only "No show" button so
+  they can be resolved rather than left holding inventory.
+- ~~The housekeeping menu on a room card was clipped and unclickable~~ — the
+  card carried `overflow-hidden` (to clip the status stripe to its rounded
+  corners) and the menu opened downward past the card's bottom edge, so "Flag
+  for cleaning" and "Take out of service" had never been reachable from the UI.
+  The stripe rounds its own corners (`rounded-t-2xl`), the card no longer
+  clips, and the menu opens upward — a card in the last grid row would
+  otherwise be cut off by the viewport instead.
 
 ### Audit follow-ups
 

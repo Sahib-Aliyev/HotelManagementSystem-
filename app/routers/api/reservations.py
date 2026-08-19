@@ -132,13 +132,15 @@ async def check_in(reservation_id: int, db: DbSession, _user: StaffUser):
 async def check_out(
     reservation_id: int,
     db: DbSession,
-    _user: StaffUser,
+    user: StaffUser,
     allow_outstanding_balance: bool = Query(
-        False, description="Check out even if money is still owed"
+        False, description="Manager only. Writes the balance off and records who did.",
     ),
 ):
     return await ReservationService(db).check_out(
-        reservation_id, allow_outstanding_balance=allow_outstanding_balance
+        reservation_id,
+        allow_outstanding_balance=allow_outstanding_balance,
+        acting_user=user,
     )
 
 
@@ -147,9 +149,16 @@ async def cancel(
     reservation_id: int,
     payload: ReservationCancel,
     db: DbSession,
-    _user: StaffUser,
+    user: StaffUser,
 ):
-    return await ReservationService(db).cancel(reservation_id, payload.reason)
+    """Cancelling a stay that is already checked in is a manager action —
+    the role check lives in the service, which knows the status."""
+    return await ReservationService(db).cancel(
+        reservation_id,
+        payload.reason,
+        waive_balance=payload.waive_balance,
+        acting_user=user,
+    )
 
 
 @router.post("/{reservation_id}/no-show", response_model=ReservationRead)

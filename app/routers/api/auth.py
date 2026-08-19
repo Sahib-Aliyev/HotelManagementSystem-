@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request, Response, status
 
 from app.core.config import settings
-from app.core.deps import AdminUser, CurrentUser, DbSession
+from app.core.deps import AdminUser, CurrentUser, DbSession, OptionalUser
 from app.core.ratelimit import limiter
 from app.schemas.auth import (
     LoginRequest,
@@ -47,9 +47,16 @@ async def login(
 
 
 @router.post("/logout", response_model=Message)
-async def logout(response: Response):
+async def logout(response: Response, db: DbSession, user: OptionalUser):
+    """Sign out, and make the token itself stop working.
+
+    `OptionalUser` rather than `CurrentUser`: an expired or already-revoked
+    session must still be able to clear its cookie.
+    """
     response.delete_cookie(settings.SESSION_COOKIE_NAME, path="/")
-    return Message(message="Signed out.")
+    if user is not None:
+        await AuthService(db).revoke_sessions(user)
+    return Message(message="Signed out on every device.")
 
 
 @router.get("/me", response_model=UserRead)

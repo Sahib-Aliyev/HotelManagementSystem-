@@ -24,10 +24,23 @@ from app.services.pricing import total_due
 from app.repositories.guest_repo import GuestRepository
 from app.repositories.reservation_repo import ReservationRepository
 from app.repositories.room_repo import RoomRepository
-from app.schemas.reservation import ReservationCreate, ReservationUpdate
+from app.schemas.reservation import (
+    ReservationCreate,
+    ReservationUpdate,
+    stay_range_error,
+)
 
 #: Statuses from which a booking may still be edited.
 EDITABLE_STATUSES = (ReservationStatus.PENDING, ReservationStatus.CONFIRMED)
+
+#: Ceiling of Numeric(10, 2). Postgres raises on overflow and SQLite silently
+#: keeps the oversized value, so the price is checked before it is stored.
+MAX_TOTAL_PRICE = Decimal("99999999.99")
+
+#: PATCH fields that may legitimately be set back to null. Every other field
+#: typed `X | None` is optional-on-input, not nullable — an explicit JSON null
+#: there used to reach the arithmetic and raise a TypeError.
+NULLABLE_UPDATE_FIELDS = frozenset({"special_requests"})
 
 
 class ReservationService:
@@ -49,11 +62,28 @@ class ReservationService:
 
     @staticmethod
     def _price(nightly_rate: Decimal, nights: int) -> Decimal:
-        return (Decimal(nightly_rate) * nights).quantize(Decimal("0.01"))
+        total = (Decimal(nightly_rate) * nights).quantize(Decimal("0.01"))
+        if total > MAX_TOTAL_PRICE:
+            raise ValidationError(
+                f"The total price of {total} is above the maximum this system "
+                f"can store ({MAX_TOTAL_PRICE}). Shorten the stay or lower the rate."
+            )
+        return total
 
     @staticmethod
+    def _assert_is_manager(acting_user: User | None, action: str) -> None:
+        """The one place this service decides what a receptionist may not do."""
+        if acting_user is None or acting_user.role not in (
+            UserRole.ADMIN,
+            UserRole.MANAGER,
+        ):
+            raise PermissionDeniedError(
+                f"Only a manager or administrator can {action}."
+            )
+
+    @classmethod
     def _assert_may_set_rate(
-        nightly_rate: Decimal | None, acting_user: User | None
+        cls, nightly_rate: Decimal | None, acting_user: User | None
     ) -> None:
         """Discounting is a manager decision, so it is enforced here.
 
@@ -63,13 +93,15 @@ class ReservationService:
         """
         if nightly_rate is None:
             return
-        if acting_user is None or acting_user.role not in (
-            UserRole.ADMIN,
-            UserRole.MANAGER,
-        ):
-            raise PermissionDeniedError(
-                "Only a manager or administrator can override the nightly rate."
-            )
+        cls._assert_is_manager(acting_user, "override the nightly rate")
+
+    def _record_waiver(
+        self, reservation: Reservation, amount: Decimal, acting_user: User | None
+    ) -> None:
+        """Write down money the hotel let go of, and who let go of it."""
+        reservation.waived_amount = amount
+        reservation.waived_at = utcnow()
+        reservation.waived_by_id = acting_user.id if acting_user else None
 
     async def _assert_room_free(
         self,
@@ -182,13 +214,28 @@ class ReservationService:
                 "can no longer be edited."
             )
 
-        data = payload.model_dump(exclude_unset=True)
+        # An explicit `null` survives exclude_unset, so without this the merge
+        # below reads None as "the new value" and the arithmetic blows up.
+        data = {
+            field: value
+            for field, value in payload.model_dump(exclude_unset=True).items()
+            if value is not None or field in NULLABLE_UPDATE_FIELDS
+        }
         new_room_id = data.get("room_id", reservation.room_id)
         new_check_in = data.get("check_in_date", reservation.check_in_date)
         new_check_out = data.get("check_out_date", reservation.check_out_date)
 
-        if new_check_out <= new_check_in:
-            raise ValidationError("Check-out must be after check-in.")
+        # The same range rule create applies, on the merged dates — PATCH used
+        # to accept any range at all and re-price from it.
+        problem = stay_range_error(new_check_in, new_check_out)
+        if problem:
+            raise ValidationError(problem)
+
+        # Moving a stay into the past fabricates occupancy and ADR history.
+        # Only a change is rejected: a booking that already started keeps its
+        # arrival date when something else is edited.
+        if new_check_in != reservation.check_in_date and new_check_in < date.today():
+            raise ValidationError("Check-in date cannot be in the past.")
 
         dates_or_room_changed = (
             new_room_id != reservation.room_id
@@ -258,7 +305,11 @@ class ReservationService:
         return await self.get(reservation.id)
 
     async def check_out(
-        self, reservation_id: int, *, allow_outstanding_balance: bool = False
+        self,
+        reservation_id: int,
+        *,
+        allow_outstanding_balance: bool = False,
+        acting_user: User | None = None,
     ) -> Reservation:
         reservation = await self.get(reservation_id)
 
@@ -266,12 +317,20 @@ class ReservationService:
             raise ConflictError("Only a checked-in guest can be checked out.")
 
         _, balance_due = await self.balance(reservation)
-        if balance_due > 0 and not allow_outstanding_balance:
-            raise ConflictError(
-                f"There is an outstanding balance of {balance_due}. "
-                "Settle it or confirm check-out with a balance.",
-                details={"balance_due": str(balance_due)},
+        if balance_due > 0:
+            if not allow_outstanding_balance:
+                raise ConflictError(
+                    f"There is an outstanding balance of {balance_due}. "
+                    "Settle it or confirm check-out with a balance.",
+                    details={"balance_due": str(balance_due)},
+                )
+            # Leaving without paying is a commercial decision, not a
+            # front-desk convenience — so it needs a manager and it is
+            # written down against the reservation.
+            self._assert_is_manager(
+                acting_user, "check a guest out with an outstanding balance"
             )
+            self._record_waiver(reservation, balance_due, acting_user)
 
         reservation.status = ReservationStatus.CHECKED_OUT
         reservation.actual_check_out = utcnow()
@@ -281,7 +340,14 @@ class ReservationService:
         await self.db.commit()
         return await self.get(reservation.id)
 
-    async def cancel(self, reservation_id: int, reason: str | None = None) -> Reservation:
+    async def cancel(
+        self,
+        reservation_id: int,
+        reason: str | None = None,
+        *,
+        waive_balance: bool = False,
+        acting_user: User | None = None,
+    ) -> Reservation:
         reservation = await self.get(reservation_id)
 
         if reservation.status == ReservationStatus.CANCELLED:
@@ -290,6 +356,21 @@ class ReservationService:
             raise ConflictError("A completed stay cannot be cancelled.")
 
         was_in_house = reservation.status == ReservationStatus.CHECKED_IN
+        if was_in_house:
+            # Cancelling an in-house stay hides the nights slept from every
+            # report and blocks any later payment, so the debt has to be dealt
+            # with first and only a manager may write it off. A booking that
+            # never arrived owes nothing and stays a front-desk action.
+            self._assert_is_manager(acting_user, "cancel a stay that is checked in")
+            _, balance_due = await self.balance(reservation)
+            if balance_due > 0:
+                if not waive_balance:
+                    raise ConflictError(
+                        f"This guest still owes {balance_due}. Take the payment, "
+                        "or cancel with the balance explicitly written off.",
+                        details={"balance_due": str(balance_due)},
+                    )
+                self._record_waiver(reservation, balance_due, acting_user)
 
         reservation.status = ReservationStatus.CANCELLED
         reservation.cancelled_at = utcnow()

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
-from app.core.ratelimit import limiter
+from app.core.ratelimit import failed_logins, limiter
 from app.core.security import hash_password
 from app.main import app
 from app.models import Guest, Room, RoomType, User, UserRole
@@ -23,8 +23,10 @@ def _isolate_rate_limiter():
     """The limiter's counters are process-wide, so one test's logins would
     otherwise eat into the next test's budget."""
     limiter.reset()
+    failed_logins.clear()
     yield
     limiter.reset()
+    failed_logins.clear()
 
 
 @pytest_asyncio.fixture

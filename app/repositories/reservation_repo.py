@@ -7,10 +7,11 @@ from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.models.guest import Guest
-from app.models.payment import Payment, PaymentStatus
+from app.models.payment import Payment
 from app.models.reservation import BLOCKING_STATUSES, Reservation, ReservationStatus
 from app.models.room import Room
 from app.repositories.base import LIKE_ESCAPE, BaseRepository, like_pattern
+from app.repositories.payment_repo import is_cash_movement, signed_amount
 
 
 def _with_relations(stmt: Select) -> Select:
@@ -95,27 +96,38 @@ class ReservationRepository(BaseRepository[Reservation]):
         return rows, total
 
     async def arrivals_on(self, day: date) -> list[Reservation]:
+        """Everyone still expected as of `day`, earliest first.
+
+        Deliberately `<=` and not `==`: a booking whose arrival date has passed
+        without a check-in or a no-show used to match no day at all, so it
+        appeared on no screen while its room stayed blocked.
+        """
         stmt = (
             _with_relations(select(Reservation))
             .join(Room, Reservation.room_id == Room.id)
             .where(
-                Reservation.check_in_date == day,
+                Reservation.check_in_date <= day,
                 Reservation.status.in_(
                     [ReservationStatus.PENDING, ReservationStatus.CONFIRMED]
                 ),
             )
-            .order_by(Room.room_number)
+            .order_by(Reservation.check_in_date, Room.room_number)
         )
         return list((await self.db.execute(stmt)).unique().scalars())
 
     async def departures_on(self, day: date) -> list[Reservation]:
+        """Everyone due to leave by `day`, most overdue first.
+
+        Same reason as `arrivals_on`: with `==` an overdue guest vanished from
+        the Departures column instead of being the first thing on it.
+        """
         stmt = (
             _with_relations(select(Reservation))
             .where(
-                Reservation.check_out_date == day,
+                Reservation.check_out_date <= day,
                 Reservation.status == ReservationStatus.CHECKED_IN,
             )
-            .order_by(Reservation.id)
+            .order_by(Reservation.check_out_date, Reservation.id)
         )
         return list((await self.db.execute(stmt)).unique().scalars())
 
@@ -136,9 +148,10 @@ class ReservationRepository(BaseRepository[Reservation]):
         return int((await self.db.execute(stmt)).scalar_one())
 
     async def amount_paid(self, reservation_id: int) -> Decimal:
-        stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(
+        """What the guest has actually paid: settled payments less refunds."""
+        stmt = select(func.coalesce(func.sum(signed_amount()), 0)).where(
             Payment.reservation_id == reservation_id,
-            Payment.status == PaymentStatus.PAID,
+            is_cash_movement(),
         )
         return Decimal(str((await self.db.execute(stmt)).scalar_one()))
 
@@ -155,13 +168,21 @@ class ReservationRepository(BaseRepository[Reservation]):
         )
         return (await self.db.execute(stmt)).unique().scalars().first()
 
-    async def upcoming_for_room(self, room_id: int, day: date) -> Reservation | None:
+    async def upcoming_for_room(self, room_id: int) -> Reservation | None:
+        """The next booking holding this room, arrival date passed or not.
+
+        No date filter on purpose: a booking whose arrival date went by without
+        a check-in still blocks the room, and filtering on `check_in_date >=
+        today` left the rooms board showing "no upcoming bookings" for a room
+        that could not be sold.
+        """
         stmt = (
             _with_relations(select(Reservation))
             .where(
                 Reservation.room_id == room_id,
-                Reservation.status.in_(BLOCKING_STATUSES),
-                Reservation.check_in_date >= day,
+                Reservation.status.in_(
+                    [ReservationStatus.PENDING, ReservationStatus.CONFIRMED]
+                ),
             )
             .order_by(Reservation.check_in_date)
             .limit(1)

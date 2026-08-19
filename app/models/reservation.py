@@ -87,11 +87,21 @@ class Reservation(Base, TimestampMixin):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancellation_reason: Mapped[str | None] = mapped_column(String(255))
 
+    # Money let go of: check-out with an outstanding balance, or cancelling a
+    # stay that was already in house. Both are manager decisions and both used
+    # to leave no trace of who took them.
+    waived_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    waived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    waived_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+
     guest: Mapped[Guest] = relationship(back_populates="reservations", lazy="joined")
     room: Mapped[Room] = relationship(back_populates="reservations", lazy="joined")
     created_by: Mapped[User | None] = relationship(
         back_populates="created_reservations", foreign_keys=[created_by_id]
     )
+    waived_by: Mapped[User | None] = relationship(foreign_keys=[waived_by_id])
     payments: Mapped[list[Payment]] = relationship(
         back_populates="reservation", cascade="all, delete-orphan"
     )

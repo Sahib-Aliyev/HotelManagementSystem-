@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     LOGIN_RATE_LIMIT: str = "10/minute"
     PASSWORD_CHANGE_RATE_LIMIT: str = "5/minute"
+    #: Where the limiter keeps its counters. In-memory is per-process, so with
+    #: more than one worker or container each keeps its own and the effective
+    #: limit is multiplied by their number — point this at Redis
+    #: ("redis://host:6379/0") as soon as there is a second instance.
+    RATE_LIMIT_STORAGE_URI: str = "memory://"
+    #: Per-account brake, on top of the per-IP limit above: the IP limit alone
+    #: does not stop a botnet spreading ten attempts per address over many
+    #: hosts against one account.
+    ACCOUNT_LOCK_AFTER_FAILURES: int = 10
+    ACCOUNT_LOCK_MINUTES: int = 15
 
     # --- cors / hosts ---
     CORS_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000"

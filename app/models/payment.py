@@ -57,7 +57,19 @@ class Payment(Base, TimestampMixin):
     note: Mapped[str | None] = mapped_column(String(255))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # A refund is a new row pointing at the settled payment it reverses; the
+    # original is never edited, so the cash that came in stays on the record.
+    refunded_payment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("payments.id", ondelete="SET NULL"), index=True
+    )
+    recorded_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+
     reservation: Mapped[Reservation] = relationship(back_populates="payments")
+    refunded_payment: Mapped["Payment | None"] = relationship(
+        remote_side="Payment.id", foreign_keys=[refunded_payment_id]
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Payment {self.amount} {self.method.value}>"
