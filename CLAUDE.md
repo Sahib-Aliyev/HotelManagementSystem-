@@ -137,10 +137,13 @@ long utility strings. Reuse it rather than hand-rolling a new card or button.
   transition.
 - **"Sleeps up to N" is a room, "N guest(s)" is a booking.** Capacity belongs to
   the room type, is shared by every room of that type and does not follow the
-  booking — a Family Room sleeps up to 4 whether one guest or four are in it.
-  The party size belongs to the stay. The room card carries both, worded so they
-  cannot be swapped: "Sleeps up to 4" on the room line, "1 guest staying" on the
-  occupant line. Printing one
+  booking — a Family Room sleeps up to 4 whether one guest or four are in it. It
+  is also the ceiling a booking is validated against, so it cannot follow one.
+  The party size belongs to the stay. Both numbers belong on a room card and
+  they are stated together rather than in separate places where they read as
+  rival answers to the same question: an occupied room says **"1 of 4 guests"**,
+  an empty one **"Sleeps up to 4"**, and a "Next arrival" block names the party
+  that is coming (`27 Aug · 1 guest`). Printing one
   in the other's words puts two different numbers for the same room on two
   screens — see "Fixed bugs". `settings.html` and `new_reservation.html` already
   used "Sleeps"/"sleeps"; keep to it.

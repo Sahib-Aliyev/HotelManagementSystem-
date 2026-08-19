@@ -114,12 +114,14 @@
 
           <p class="mt-2 text-xs text-slate-400">
             Floor <span x-text="entry.room.floor"></span> ·
-            {# The room's capacity, which comes from the room type and is the
-               same for every room of that type — "up to" because it is a
-               maximum, not the number of people currently in the room. That is
-               the line below, and reading one as the other is what made a
-               family room look like it held four guests. #}
-            <span x-text="`Sleeps up to ${entry.room.room_type.capacity}`"></span> ·
+            {# Capacity comes from the room type and is the same for every room
+               of that type; the party comes from the stay. Both belong here, so
+               an occupied room states them together — "1 of 4 guests" — and an
+               empty one states the maximum on its own. #}
+            <span class="font-medium text-slate-500 dark:text-slate-400"
+                  x-text="entry.occupant
+                    ? `${entry.occupant.adults + entry.occupant.children} of ${entry.room.room_type.capacity} guests`
+                    : `Sleeps up to ${entry.room.room_type.capacity}`"></span> ·
             <span class="font-semibold text-slate-600 dark:text-slate-300"
                   x-text="fmt.money(entry.room.room_type.base_price)"></span>
           </p>
@@ -129,11 +131,7 @@
               <div>
                 <p class="truncate text-xs font-semibold text-slate-800 dark:text-slate-100" x-text="entry.occupant.guest.full_name"></p>
                 <p class="truncate text-[11px] text-slate-500"
-                   x-text="(() => {
-                     const party = entry.occupant.adults + entry.occupant.children;
-                     return `Out ${fmt.dateShort(entry.occupant.check_out_date)} · ${party} guest${party === 1 ? '' : 's'} staying`;
-                   })()"></p>
-                <p class="truncate font-mono text-[10px] text-slate-400" x-text="entry.occupant.reference"></p>
+                   x-text="`Out ${fmt.dateShort(entry.occupant.check_out_date)} · ${entry.occupant.reference}`"></p>
                 <p x-show="fmt.daysOverdue(entry.occupant.check_out_date) > 0" style="display:none"
                    class="badge mt-1" :class="badgeClass('cancelled')"
                    x-text="fmt.overdueLabel(entry.occupant.check_out_date)"></p>
@@ -143,8 +141,14 @@
               <div>
                 <p class="truncate text-xs font-medium text-slate-600 dark:text-slate-300"
                    x-text="fmt.daysOverdue(entry.upcoming.check_in_date) > 0 ? 'Never arrived' : 'Next arrival'"></p>
+                {# Name and details on separate lines: all three on one truncated
+                   to an ellipsis at card width, which cut off the party size. #}
+                <p class="truncate text-[11px] text-slate-500" x-text="entry.upcoming.guest.full_name"></p>
                 <p class="truncate text-[11px] text-slate-500"
-                   x-text="`${entry.upcoming.guest.full_name} · ${fmt.dateShort(entry.upcoming.check_in_date)}`"></p>
+                   x-text="(() => {
+                     const party = entry.upcoming.adults + entry.upcoming.children;
+                     return `${fmt.dateShort(entry.upcoming.check_in_date)} · ${party} guest${party === 1 ? '' : 's'}`;
+                   })()"></p>
                 <p x-show="fmt.daysOverdue(entry.upcoming.check_in_date) > 0" style="display:none"
                    class="badge mt-1" :class="badgeClass('cancelled')"
                    x-text="`Holds the room · ${fmt.overdueLabel(entry.upcoming.check_in_date)}`"></p>
