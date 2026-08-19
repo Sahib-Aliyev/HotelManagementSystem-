@@ -305,7 +305,12 @@ function frontDesk() {
             emptyBody: 'Nobody is due out, and nobody has overstayed.',
           },
           {
-            key: 'in_house', title: 'In house', subtitle: 'Currently staying', items: board.in_house,
+            key: 'in_house', title: 'In house',
+            // The badge counts stays; the guests inside them are a different
+            // number, so say both rather than leaving them to be compared.
+            subtitle: `${board.in_house.length} stay(s) · `
+              + `${board.in_house.reduce((n, r) => n + r.adults + r.children, 0)} guest(s)`,
+            items: board.in_house,
             edge: 'bg-accent-500',
             badge: 'bg-accent-50 text-accent-700 ring-accent-200 dark:bg-accent-500/15 dark:text-accent-300 dark:ring-accent-500/30',
             emptyIcon: EMPTY_ICONS.in_house, emptyTitle: 'No guests in house',

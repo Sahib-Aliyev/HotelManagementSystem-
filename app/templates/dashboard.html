@@ -205,6 +205,8 @@ function dashboard() {
     updatedAt: '',
     _charts: {},
 
+    inHouseStays: 0,
+
     async load() {
       try {
         const [payload, trend, statusSummary] = await Promise.all([
@@ -214,6 +216,10 @@ function dashboard() {
         ]);
 
         this.stats = payload.stats;
+        // How many stays those guests belong to. The tile counts people, every
+        // other "in house" figure on the screens counts stays, and without both
+        // numbers side by side the two read as a contradiction.
+        this.inHouseStays = payload.in_house.length;
         this.buildCards();
         this.buildLists(payload);
         this.buildLegend(statusSummary);
@@ -267,11 +273,11 @@ function dashboard() {
           iconBg: 'bg-amber-50 text-amber-600 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30',
         },
         {
-          label: 'In-house guests',
+          label: 'Guests in house',
           value: s.in_house_guests,
-          hint: s.outstanding_balance > 0
+          hint: `${this.inHouseStays} stay(s) · ` + (s.outstanding_balance > 0
             ? `${fmt.money(s.outstanding_balance)} outstanding`
-            : 'All accounts settled',
+            : 'all accounts settled'),
           icon: ICONS.guests,
           iconBg: 'bg-purple-50 text-purple-600 ring-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:ring-purple-500/30',
         },

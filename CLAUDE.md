@@ -140,6 +140,12 @@ long utility strings. Reuse it rather than hand-rolling a new card or button.
   in the other's words puts two different numbers for the same room on two
   screens — see "Fixed bugs". `settings.html` and `new_reservation.html` already
   used "Sleeps"/"sleeps"; keep to it.
+- **Anything counted in two units has to name the unit.** "In house" is five
+  stays and nine people at the same time; "occupied" is five rooms. A bare
+  number next to another bare number reads as a contradiction even when both are
+  right, so the dashboard tile says *Guests in house* with `N stay(s)` under it,
+  and the front-desk column says `N stay(s) · N guest(s)`. Same for arrivals and
+  departures: those count stays, not people.
 - **The sidebar is `lg:sticky lg:top-0 lg:h-screen`, not `lg:static`.** As a
   static flex child it stretched to the height of the page, so scrolling a long
   list carried the whole navigation off screen and left an empty column behind.
@@ -405,6 +411,14 @@ from `BUGS-TODO.md`. Regression tests: `tests/test_reservations.py`,
   and Escape / outside click / a second click all dismiss it. The full round
   trip runs in the app: Available → Flag for cleaning → Cleaning → Mark clean →
   Available.
+- ~~"In-house guests 9" looked wrong next to "Occupied 5"~~ — the same class of
+  problem one screen over, and the number was right: five stays were in house
+  holding nine people (1 + 3 + 1 + 1 + 3), while every other "in house" figure
+  on the screens counts stays. Nothing said which unit either number was in. The
+  dashboard tile is *Guests in house* now, with `5 stay(s) · … outstanding`
+  underneath, and the front-desk column reads `5 stay(s) · 9 guest(s)`. The API
+  figure (`DashboardStats.in_house_guests`, the sum of `guest_count`) was
+  correct and is unchanged.
 - ~~A room card and the front desk disagreed about how many guests were in a
   room~~ — the front desk showed room 306 as "Family Room · 1 guest(s)" while
   the rooms board showed the same room as "4 guest(s)". Neither number was
