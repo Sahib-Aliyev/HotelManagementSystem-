@@ -115,6 +115,17 @@ class RoomService:
                     f"Room {room.room_number} is occupied by {occupant.guest.full_name}."
                 )
 
+        # A room with a guest checked into it is never "available". Housekeeping
+        # cleans occupied rooms every day, and marking one clean used to put it
+        # back on the sale floor while the guest was still in it: the card read
+        # AVAILABLE, the guest was listed on it, and booking failed with a
+        # conflict nobody could explain. Cleaning an occupied room returns it to
+        # OCCUPIED instead.
+        if data.get("status") == RoomStatus.AVAILABLE:
+            occupant = await self.reservations.active_for_room(room_id)
+            if occupant is not None:
+                data["status"] = RoomStatus.OCCUPIED
+
         for field, value in data.items():
             setattr(room, field, value)
         await self.db.commit()
@@ -122,6 +133,8 @@ class RoomService:
         return room
 
     async def set_status(self, room_id: int, status: RoomStatus) -> Room:
+        """Housekeeping status. Returns the room, whose status may differ from
+        the one asked for — see the occupancy rule in `update_room`."""
         return await self.update_room(room_id, RoomUpdate(status=status))
 
     async def delete_room(self, room_id: int) -> None:

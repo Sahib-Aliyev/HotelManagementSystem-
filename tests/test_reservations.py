@@ -810,3 +810,98 @@ async def test_a_manager_must_write_off_the_balance_to_cancel_an_in_house_stay(
     # 2 nights x 150.00 + 18% VAT
     assert float(body["waived_amount"]) == 354.00
     assert body["waived_at"] is not None
+
+
+# ------------------------------------------------ housekeeping vs occupancy
+async def test_cleaning_an_occupied_room_returns_it_to_occupied(
+    reception_client, seeded
+):
+    """A room with a guest checked into it is never "available".
+
+    Housekeeping cleans occupied rooms daily, and "Mark clean" used to put the
+    room back on the sale floor while the guest was still in it: the card read
+    AVAILABLE with the guest's name on it, and every booking attempt failed
+    with an overlap conflict that nothing in the UI explained.
+    """
+    reservation_id = await _checked_in_stay(reception_client, seeded)
+    room_id = seeded["rooms"][1].id
+
+    occupied = await reception_client.get(f"/api/v1/rooms/{room_id}")
+    assert occupied.json()["status"] == "occupied"
+
+    # Daily housekeeping on an in-house room is legitimate.
+    flagged = await reception_client.post(
+        f"/api/v1/rooms/{room_id}/status", params={"new_status": "cleaning"}
+    )
+    assert flagged.status_code == 200
+    assert flagged.json()["status"] == "cleaning"
+
+    cleaned = await reception_client.post(
+        f"/api/v1/rooms/{room_id}/status", params={"new_status": "available"}
+    )
+    assert cleaned.status_code == 200
+    assert cleaned.json()["status"] == "occupied", (
+        "the guest is still checked in, so the room goes back to occupied"
+    )
+
+    # And the stay itself is untouched by any of that.
+    stay = await reception_client.get(f"/api/v1/reservations/{reservation_id}")
+    assert stay.json()["status"] == "checked_in"
+
+
+async def test_a_room_without_a_guest_still_becomes_available(
+    reception_client, seeded
+):
+    """The rule above must not trap an empty room in cleaning."""
+    room_id = seeded["rooms"][2].id
+    await reception_client.post(
+        f"/api/v1/rooms/{room_id}/status", params={"new_status": "cleaning"}
+    )
+    cleaned = await reception_client.post(
+        f"/api/v1/rooms/{room_id}/status", params={"new_status": "available"}
+    )
+    assert cleaned.json()["status"] == "available"
+
+
+async def test_patching_a_room_available_while_occupied_keeps_it_occupied(
+    reception_client, seeded
+):
+    """The same rule on the other endpoint that can set a status."""
+    await _checked_in_stay(reception_client, seeded)
+    await _login(reception_client, "manager@test.az", "Manager1234")
+
+    patched = await reception_client.patch(
+        f"/api/v1/rooms/{seeded['rooms'][1].id}", json={"status": "available"}
+    )
+    assert patched.status_code == 200
+    assert patched.json()["status"] == "occupied"
+
+
+async def test_checking_out_leaves_the_room_ready_to_clean_and_then_sell(
+    reception_client, seeded
+):
+    """Once the guest has gone, cleaning does release the room."""
+    reservation_id = await _checked_in_stay(reception_client, seeded)
+    room_id = seeded["rooms"][1].id
+
+    folio = await reception_client.get(f"/api/v1/payments/folio/{reservation_id}")
+    await reception_client.post(
+        "/api/v1/payments",
+        json={
+            "reservation_id": reservation_id,
+            "amount": folio.json()["balance_due"],
+            "method": "cash",
+        },
+    )
+    checked_out = await reception_client.post(
+        f"/api/v1/reservations/{reservation_id}/check-out"
+    )
+    assert checked_out.status_code == 200
+
+    room = await reception_client.get(f"/api/v1/rooms/{room_id}")
+    assert room.json()["status"] == "cleaning"
+
+    cleaned = await reception_client.post(
+        f"/api/v1/rooms/{room_id}/status", params={"new_status": "available"}
+    )
+    assert cleaned.json()["status"] == "available"

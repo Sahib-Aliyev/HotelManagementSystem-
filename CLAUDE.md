@@ -63,6 +63,15 @@ The layer order is fixed: `routers/api` → `services` → `repositories` → SQ
   `waived_amount` / `waived_at` / `waived_by_id` on the reservation
   (`ReservationService._record_waiver`). A new way to forgive money must do
   the same.
+- **A room's housekeeping status may not contradict the calendar.** A room with
+  a guest checked into it is `OCCUPIED`, whatever housekeeping does to it.
+  Cleaning an occupied room is normal (it happens daily), so `CLEANING` is
+  allowed — but marking it clean resolves to `OCCUPIED`, not `AVAILABLE`
+  (`RoomService.update_room`). `MAINTENANCE` on an occupied room is refused
+  outright. The two statuses answer different questions and only the calendar
+  decides what can be sold: `find_available()` filters on overlap and
+  `MAINTENANCE`, never on `OCCUPIED`/`CLEANING`, so a room can be sold for
+  future dates while someone is still in it.
 - **A schema field typed `X | None` is optional on input, not nullable.** An
   explicit JSON `null` survives `model_dump(exclude_unset=True)`, so the
   services drop `None` values before merging them (`NULLABLE_UPDATE_FIELDS` in
@@ -129,6 +138,10 @@ long utility strings. Reuse it rather than hand-rolling a new card or button.
 - **The sidebar is `lg:sticky lg:top-0 lg:h-screen`, not `lg:static`.** As a
   static flex child it stretched to the height of the page, so scrolling a long
   list carried the whole navigation off screen and left an empty column behind.
+  It keeps `left: auto` from `lg` up — a sticky flex child has no reason to
+  offset horizontally — and animates only `width` and `transform`, because
+  `transition-all` on a full-height sticky layer animates far more than the
+  collapse and is a repaint hazard.
 - **A `<template x-if>` inside an `<svg>` silently breaks Alpine** — SVG is
   foreign content, so the element has no `.content` and Alpine throws on
   `cloneNode`. Bind the shape instead (`<path :d="…">`), as the toast host does.
@@ -387,13 +400,34 @@ from `BUGS-TODO.md`. Regression tests: `tests/test_reservations.py`,
   and Escape / outside click / a second click all dismiss it. The full round
   trip runs in the app: Available → Flag for cleaning → Cleaning → Mark clean →
   Available.
+- ~~Marking an occupied room clean put it back on the sale floor~~ — room
+  status and reservation status answer different questions, and nothing tied
+  them together. Flagging an in-house room for cleaning and then pressing "Mark
+  clean" set it to `AVAILABLE` while the guest was still checked in: the card
+  showed a green AVAILABLE badge with the guest's name and check-out date right
+  underneath it, and any attempt to sell the room failed on the overlap check
+  with no explanation on screen. `RoomService.update_room` now resolves
+  `AVAILABLE` to `OCCUPIED` whenever the room holds a checked-in stay, so
+  cleaning an occupied room returns it to occupied — which is what housekeeping
+  means by it. The rooms page reads the status back out of the response instead
+  of echoing what it asked for, so the toast says "Occupied". Three rooms in the
+  local demo database had already been left in that state and were repaired to
+  `OCCUPIED`. Regression tests:
+  `tests/test_reservations.py::test_cleaning_an_occupied_room_returns_it_to_occupied`
+  and the three around it, which also pin the cases that must keep working —
+  an empty room still becomes available, `PATCH /rooms/{id}` obeys the same
+  rule, and a room whose guest has checked out is sellable again once cleaned.
 - ~~The sidebar scrolled away and left an empty column~~ — the `<aside>` was
   `lg:static` inside a flex row, so it stretched to the height of the page
   (2023px against an 800px viewport). Scrolling the 28-card rooms grid put
   every one of the seven nav links off screen, leaving a blank white strip
   where the navigation should be. It is `lg:sticky lg:top-0 lg:h-screen` now,
   with its own overflow, so the navigation stays where it is at any scroll
-  position.
+  position. Two follow-ups on the same element, both so it cannot paint where it
+  should not: a sticky flex child needs no horizontal offset, so `left` is
+  `auto` from `lg` up (`lg:inset-y-auto lg:left-auto`), and the collapse
+  animation is `transition-[width,transform]` instead of `transition-all` on a
+  full-height sticky layer.
 - ~~Room cards were cramped at desktop widths~~ — the grid went to five columns
   at `xl` (1280px), which left each card 184px wide: the room type name
   truncated to "Standard …" and the price wrapped onto its own line. Five

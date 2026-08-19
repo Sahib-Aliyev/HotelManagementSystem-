@@ -325,10 +325,12 @@ function roomsPage() {
         if (!ok) return;
       }
       try {
-        await api(`/api/v1/rooms/${entry.room.id}/status`, {
+        const updated = await api(`/api/v1/rooms/${entry.room.id}/status`, {
           method: 'POST', params: { new_status: status },
         });
-        toastSuccess(`Room ${entry.room.room_number} updated`, fmt.titleCase(status));
+        // Read the status back rather than echoing the request: a room with a
+        // guest in it comes back OCCUPIED however it was flagged.
+        toastSuccess(`Room ${entry.room.room_number} updated`, fmt.titleCase(updated.status));
         this.loading = true;
         await this.load();
       } catch (err) {
