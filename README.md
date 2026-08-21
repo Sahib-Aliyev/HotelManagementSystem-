@@ -43,10 +43,10 @@ Two security audits and one functional review have been through this code. As of
 
 | Question | Where it is answered |
 | --- | --- |
-| What is fixed, and what broke in the first place | "Fixed bugs" in [`CLAUDE.md`](CLAUDE.md) |
+| What is fixed, and what broke in the first place | [`docs/history/`](docs/history/README.md) |
 | What is still open on security | [`SECURITY-TODO.md`](SECURITY-TODO.md) |
 | What is still open functionally | [`BUGS-TODO.md`](BUGS-TODO.md) |
-| The rules this code must not break | "Conventions" and "Security rules" in [`CLAUDE.md`](CLAUDE.md) |
+| The rules this code must not break | [`CLAUDE.md`](CLAUDE.md) and [`.claude/rules/`](.claude/rules) |
 | How a change came to be | `git log` — the history is part of the documentation |
 
 Everything written down here — documentation, commit messages, code comments —

@@ -3,7 +3,8 @@
 What is left after the audits. The eleven gaps the first audit (2026-08) found
 are closed (commit `89b3dcb`), as are the two follow-ups (the invoice PDF crash
 and the LIKE wildcards) and, as of **2026-08-19**, all eleven findings of the
-second review of 2026-08-17. The full history is in CLAUDE.md; this file tracks
+second review of 2026-08-17. The full history is in `docs/history/`; this file
+tracks
 only what has **not** been done yet.
 
 The second review also confirmed a number of areas as clean — mass assignment
@@ -17,12 +18,12 @@ The **audit of 2026-08-19** then found five more — the two-doors-one-lock
 authorisation split on room status, `TRUSTED_HOSTS` missing from the boot check,
 the unbounded failed-login store, missing payment idempotency and the absent
 erasure path — plus three smaller items. All are closed; the details are in
-CLAUDE.md. That audit asked what *states* the application can be driven into
+`docs/history/audit-2026-08-19-architecture.md`. That audit asked what *states* the application can be driven into
 rather than walking code paths, which is why it reached things two security
 reviews had not.
 
-When an item is finished, delete it from here and move it into the "Fixed bugs"
-section of CLAUDE.md, and add the regression test that keeps it fixed.
+When an item is finished, delete it from here and record it in
+`docs/history/fixed-bugs.md`, with the regression test that keeps it fixed.
 
 ---
 

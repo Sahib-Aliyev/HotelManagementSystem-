@@ -7,15 +7,16 @@ Functional defects that are not security issues — those live in
 
 The eighteen findings of the architecture and production-readiness audit of
 **2026-08-19** were all fixed the same day; the details, the reproductions and the
-measured figures are in the "Architecture & production-readiness audit of
-2026-08-19" section of CLAUDE.md, each with its regression test. The two entries
+measured figures are in `docs/history/audit-2026-08-19-architecture.md`, each
+with its regression test. The two entries
 this file carried before that (the overdue guest who disappeared from the front
 desk, and the housekeeping menu clipped by its room card) were closed on the
 same date and are recorded there too.
 
 When something is found, describe it here the way those were: symptom, where in
-the code, what was measured or reproduced, and what the fix should be — then move
-it into CLAUDE.md with its regression test once it is closed.
+the code, what was measured or reproduced, and what the fix should be — then
+record it in `docs/history/fixed-bugs.md` with its regression test once it is
+closed.
 
 ---
 
