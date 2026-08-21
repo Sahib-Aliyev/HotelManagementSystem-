@@ -1,18 +1,15 @@
 # Automating the workflow: hooks and skills
 
-Brief for a future session. Two gaps, both about the same thing: the conventions
-in this repository are *context*, not configuration. Claude reads them and
-usually follows them — but nothing makes a violation impossible, and nothing
-carries the repeated procedures from one session to the next except retyping
-them.
+The conventions in this repository are *context*. Claude reads them and usually
+follows them, but context cannot make a violation impossible, and it cannot
+carry a repeated procedure from one session to the next except by being retyped.
+Two mechanisms close that gap, and both were added on **2026-08-21**:
 
-- **Gap 1 — nothing enforces a rule.** CLAUDE.md says `alembic check` must pass
-  and that a commit needs a broad message. Both survive only because whoever is
-  working chooses to comply. A hook is a command the harness runs at a fixed
-  moment, whatever the model decides.
-- **Gap 2 — the same procedure is re-explained every time.** Closing a finding
-  has been the same five steps roughly thirty times. A skill is that procedure
-  written once, loaded only when invoked.
+- **A hook** is a command the harness runs at a fixed moment, whatever the model
+  decides. Three of them live in `.claude/settings.json`, which is committed, so
+  the whole project gets them.
+- **A skill** is a procedure written once and loaded only when invoked.
+  `/finding` is the first, in `.claude/skills/finding/SKILL.md`.
 
 ## The rule that keeps this from becoming duplication
 
@@ -24,68 +21,71 @@ them.
 | Skill | the order of steps, and where to look up each step's rule | the rules themselves, or the history behind them |
 
 Concretely: the migration hook runs `alembic check` — the command CLAUDE.md's
-**Commands** section already gives — and on failure its message is
-"schema drift: see `.claude/rules/migrations.md`". It does not explain batch mode
-on SQLite. The `/finding` skill says "write the regression test — naming rule in
-`.claude/rules/tests.md`". It does not repeat the naming rule.
+**Commands** section already gives — and on failure its message names
+`.claude/rules/migrations.md`. It does not explain batch mode on SQLite. The
+`/finding` skill says "naming and placement: `.claude/rules/tests.md`". It does
+not repeat the naming rule.
 
-Test for it afterwards: pick a distinctive phrase from any rule and grep the
-repository. It must appear in exactly one file. If a hook or skill made a second
-copy, delete the copy and link instead.
+Test for it when touching either: pick a distinctive phrase from any rule and
+grep the repository. It must appear in exactly one file. If a hook or a skill
+made a second copy, delete the copy and link instead.
 
 ---
 
-## Gap 1 — hooks
+## The three hooks
 
-Hooks live in `.claude/settings.json`, which does not exist yet (`.claude/` holds
-only `launch.json`). It is committed, so the whole project gets them.
+All three run `python <script>` — a bare `python` on `PATH`, deliberately. Hook
+commands go through the platform shell, and on this machine `cmd.exe` refuses a
+program path written with forward slashes (`.venv/Scripts/python.exe …` fails
+with *'.venv' is not recognized*) while a POSIX shell refuses one written with
+backslashes. A program name with no separator in it works in both. The scripts
+themselves then locate `.venv\Scripts\alembic.exe` and `.venv\Scripts\python.exe`
+internally, with a fallback for CI, where there is no `.venv`.
 
-### 1a. `alembic check` after a model edit — the highest-value one
+Each script's own module docstring names what it enforces. What is worth
+recording is why each one exists at all.
 
-**Where it fires:** `PostToolUse`, on `Edit`/`Write` touching `app/models/**`.
+### `schema_drift_check.py` — `alembic check` after a model edit
 
-**What it runs:** `.venv\Scripts\alembic.exe check`, and on failure feeds the
-output back so the same session sees it.
+`PostToolUse` on `Edit`/`Write` under `app/models/**`. The 2026-08-19 audit found
+the models and the migrations had silently diverged and nothing noticed for
+weeks; what that cost is in `docs/history/audit-2026-08-19-architecture.md`. CI
+catches it now, but only after a push. This hook catches it in the minute the
+model changes, which is when the migration is still cheap to write.
 
-**Why here:** the 2026-08-19 audit found that the models and the migrations had
-silently diverged — development builds its schema with `create_all()` and
-production migrates, so the two had structurally different databases and nothing
-noticed for weeks. CI catches it now, but only after a push. This hook catches it
-in the minute the model changes, which is when the migration is cheap to write.
+### `commit_message_gate.py` — refuse a commit whose message is one line
 
-**Rule it enforces, and does not restate:** `.claude/rules/migrations.md`
-(bullet 1) and the `alembic check` line in CLAUDE.md's Commands.
+`PreToolUse` on `Bash`/`PowerShell`. The **Git / commit rule** in `CLAUDE.md` is
+the convention this project leans on hardest, and it held only because whoever
+was working chose to comply. A one-line commit is exactly what slips through at
+the end of a long session.
 
-### 1b. Refuse a commit whose message is one line
+The gate reads the message from every form used here (`-m`, repeated `-m`, `-F`,
+`-F -` with a heredoc, and a PowerShell `@'…'@` here-string), refuses
+`--no-verify` alongside it, and lets through the forms that reuse an existing
+message (`--amend --no-edit`, `-C`) because it cannot read those. It fires only
+when a *segment* of the command line starts a commit, so `echo "git commit -m
+fix"` is not a commit — an early version matched the substring and blocked a
+command that merely quoted one. Both hooks are pinned by `tests/test_hooks.py`;
+a gate that is wrong in the strict direction blocks every commit in the project
+until someone edits it, which is the failure mode that test exists for.
 
-**Where it fires:** `PreToolUse`, on `Bash` when the command contains
-`git commit`.
+### `ruff_format.py` — format Python after writing it
 
-**What it checks:** a summary line, a blank line, then at least two body lines.
-Refuse `--no-verify` in the same check. It has to read the message from all the
-forms actually used here: `-m`, `-F <file>`, and a heredoc.
+`PostToolUse` on `Edit`/`Write` matching `**/*.py`. Formatting is one of the CI
+gates in `.claude/rules/tests.md`, so a badly formatted file is otherwise found
+after the push instead of before it. Formatting only — no `--fix` on lint rules, because
+silently rewriting logic behind the model's back is a different and worse class
+of surprise. A file `ruff` cannot parse is reported instead, which makes the hook
+a syntax check as well.
 
-**Why here:** "write a broad and detailed description on every commit" is the
-convention this project leans on hardest — the git log is treated as
-documentation, and the last twelve commits obey it only because the agent chose
-to. A one-line commit is exactly the kind of thing that slips through at the end
-of a long session.
+### Known gaps
 
-**Rule it enforces:** the **Git / commit rule** in CLAUDE.md.
-
-### 1c. Format Python after writing it
-
-**Where it fires:** `PostToolUse`, on `Edit`/`Write` matching `**/*.py`.
-
-**What it runs:** `.venv\Scripts\python.exe -m ruff format <file>`.
-
-**Why here:** CI runs `ruff format --check`, so a badly formatted file is found
-after the push instead of before it. Formatting only — no `--fix` on lint rules,
-because silently rewriting logic behind the model's back is a different and worse
-class of surprise.
-
-**Rule it enforces:** the lint/format line in CLAUDE.md's Commands, and the CI
-gate listed in `.claude/rules/tests.md`.
+- The `PostToolUse` matcher covers `Edit`/`Write`. A file written through the
+  shell instead — `sed -i`, a heredoc — is neither formatted nor drift-checked.
+- Hook commands assume the working directory is the project root, which is how
+  the harness runs them. If it ever is not, `python .claude/hooks/…` exits 2 on
+  a missing file, and for the `PreToolUse` gate that reads as a refusal.
 
 ### Where hooks are the wrong tool
 
@@ -94,77 +94,33 @@ the right layer for this rule", "does this figure name its basis" — stays in
 `CLAUDE.md` and `.claude/rules/`. Do not try to encode an invariant as a hook
 unless a command can decide it exactly.
 
-### Implementation risk to check first
-
-Hook commands run through the shell, and this is a Windows machine where the
-interpreter differs from the POSIX examples in the documentation. Verify one
-trivial hook end to end (something that just echoes) before writing the three
-real ones, and use the `.venv\Scripts\...` paths that CLAUDE.md's Commands
-already use rather than a bare `alembic` or `ruff`.
-
 ---
 
-## Gap 2 — skills
+## Skills
 
-Skills live in `.claude/skills/<name>/SKILL.md`, load only when invoked, and cost
-no context until then. Two are worth writing; a third is optional.
+### `/finding` — close an open item
 
-### 2a. `/finding` — close an open item (write this one first)
+The most repeated procedure in the project's history: reproduce and measure, fix
+in the layer that owns the rule, write the regression test, move the entry from
+the TODO file into `docs/history/fixed-bugs.md`, commit and push. Each step names
+its owner rather than repeating it.
 
-The most repeated procedure in the project's history. Steps, each pointing at its
-owner:
+### Still worth writing
 
-1. Reproduce it and measure — the entries in `docs/history/` show the standard:
-   symptom, exact request, observed figure.
-2. Fix it in the layer that owns the rule — layer order in CLAUDE.md's
-   **Architecture rule**; the invariant index names the rule file.
-3. Write the regression test — naming and placement in `.claude/rules/tests.md`.
-4. Delete the entry from `SECURITY-TODO.md` or `BUGS-TODO.md` and record it in
-   `docs/history/fixed-bugs.md` — the contract is in CLAUDE.md's **Open work and
-   history**.
-5. Commit with a message that explains what broke and why, then push — CLAUDE.md's
-   **Git / commit rule**. (Hook 1b will refuse it otherwise.)
-
-### 2b. `/endpoint` — add an endpoint
-
-The chain that has been dictated by hand every time: schema → repository →
-service (with the role check on the state change) → router → register it in
-`app/routers/api/__init__.py` → test. Each step links to
-`.claude/rules/api-and-schemas.md`, the **Architecture rule**, and
-`.claude/rules/tests.md`. The registration step exists because it is the one that
-gets forgotten — CLAUDE.md already says so.
-
-### 2c. `/audit` — optional
-
-The methodology that produced eighteen findings in a day: ask what *states* the
-application can be driven into rather than walking code paths. It is written down
-as "the lesson worth keeping" at the end of
-`docs/history/audit-2026-08-19-architecture.md`. A skill would make it repeatable;
-link to that section rather than restating it.
+- **`/endpoint`** — the chain dictated by hand every time: schema → repository →
+  service (with the role check on the state change) → router → register it in
+  `app/routers/api/__init__.py` → test. Each step links to
+  `.claude/rules/api-and-schemas.md`, CLAUDE.md's **Architecture rule** and
+  `.claude/rules/tests.md`. The registration step exists because it is the one
+  that gets forgotten — CLAUDE.md already says so.
+- **`/audit`** — the methodology that produced eighteen findings in a day: ask
+  what *states* the application can be driven into rather than walking code
+  paths. It is written down as "the lesson worth keeping" at the end of
+  `docs/history/audit-2026-08-19-architecture.md`; a skill would link to that
+  section rather than restate it.
 
 ### Where skills are the wrong tool
 
 A skill is optional — it applies when invoked. Anything that must hold on every
 change belongs in a rule file (always available, path-scoped) or a hook
 (enforced). Do not put an invariant in a skill.
-
----
-
-## Done when
-
-- Editing a file under `app/models/**` without writing a migration produces a
-  visible schema-drift warning in the same session.
-- `git commit -m "fix"` is refused; a commit with a real body is accepted.
-- Writing a Python file leaves it already formatted (`ruff format --check .`
-  passes without a separate step).
-- `/finding` has been run end to end on one real item from `SECURITY-TODO.md`.
-- Grepping a distinctive phrase from any rule finds it in exactly one file — no
-  hook or skill has copied prose that a rule file already owns.
-
-## Task frame for that session
-
-```
-Goal:        add the three hooks in §1 and the /finding skill in §2a
-Don't touch: app/** application code; no new rules in CLAUDE.md
-Done when:   the five checks above pass, and the phrase-grep finds no duplication
-```

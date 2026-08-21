@@ -1,0 +1,33 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/ruff_format.py",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "python .claude/hooks/schema_drift_check.py",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/commit_message_gate.py",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

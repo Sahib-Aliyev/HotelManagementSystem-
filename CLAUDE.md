@@ -142,6 +142,16 @@ that is history, not a precedent — do not add more.
   diff.
 - Push to `origin` (GitHub) once the tests pass, so the remote history is the
   same documentation the local one is.
+- A hook refuses a commit thinner than this, rather than trusting whoever is
+  working to remember → `docs/AGENT-AUTOMATION.md`
+
+## Automation
+
+`.claude/settings.json` wires three hooks (schema drift after a model edit, the
+commit-message gate, `ruff format` after writing Python) and
+`.claude/skills/finding/` carries the `/finding` procedure for closing an open
+item. A hook or a skill links to the rule it serves and never restates it; what
+each one enforces and why is in `docs/AGENT-AUTOMATION.md`.
 
 ## Rule files
 
@@ -165,8 +175,8 @@ that owns its area rather than restating it here.
 - Functional defects, and decisions deliberately not taken: `BUGS-TODO.md`
 - Limitations that are accepted rather than open: `docs/LIMITATIONS.md`
 - The sequence from here to a production deployment: `docs/ROADMAP.md`
-- Hooks and skills worth adding, and the rule files they must link to
-  rather than restate: `docs/AGENT-AUTOMATION.md`
+- The hooks and skills that exist, the two skills still worth writing, and the
+  rule files both must link to rather than restate: `docs/AGENT-AUTOMATION.md`
 - How each fixed bug happened, with the reproductions and the measured figures:
   `docs/history/` — start at `docs/history/README.md`
 - When an item is finished, delete it from the TODO file and record it in
