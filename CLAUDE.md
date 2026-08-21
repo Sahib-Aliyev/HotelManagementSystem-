@@ -165,6 +165,8 @@ that owns its area rather than restating it here.
 - Functional defects, and decisions deliberately not taken: `BUGS-TODO.md`
 - Limitations that are accepted rather than open: `docs/LIMITATIONS.md`
 - The sequence from here to a production deployment: `docs/ROADMAP.md`
+- Hooks and skills worth adding, and the rule files they must link to
+  rather than restate: `docs/AGENT-AUTOMATION.md`
 - How each fixed bug happened, with the reproductions and the measured figures:
   `docs/history/` — start at `docs/history/README.md`
 - When an item is finished, delete it from the TODO file and record it in
