@@ -1,7 +1,7 @@
 """audit of 2026-08-19: booking integrity, invoice sequence, indexes, schema drift
 
-Everything here comes out of the audit recorded in BUGS-TODO.md and
-SECURITY-TODO.md. Four separate jobs:
+Everything here comes out of the audit recorded in
+docs/history/audit-2026-08-19-architecture.md. Four separate jobs:
 
 * **Schema drift.** `alembic check` failed: three `ON DELETE SET NULL` clauses
   existed in the models but in no migration, so development (which builds its

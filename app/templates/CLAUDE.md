@@ -8,4 +8,4 @@ Server-rendered Jinja2 with Alpine.js components inline in `<script>` blocks;
 - Why a rule exists: `docs/history/` — the room-card menu and the sidebar each
   took three passes, recorded in `docs/history/review-2026-08-17.md`.
 - Moving these components into `app/static/js/pages/*.js` is what unblocks a
-  strict CSP; see `SECURITY-TODO.md` §2.1 and `BUGS-TODO.md`.
+  strict CSP; see `docs/todo/003-frontend-js-out-of-templates.md`.

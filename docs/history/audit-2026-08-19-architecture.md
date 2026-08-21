@@ -181,7 +181,7 @@ the running app before it was fixed, and each has a regression test.
   limit caps the rate, not the total. Entries expire and the store is capped now,
   evicting least-recently-touched, and an account under active attack keeps its
   lock. Redis is still the real fix for *sharing* the counters between instances
-  and remains tracked in `SECURITY-TODO.md`.
+  and remains tracked in `docs/todo/`.
 
 **Low, and the patterns behind them.**
 

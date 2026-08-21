@@ -44,8 +44,8 @@ Two security audits and one functional review have been through this code. As of
 | Question | Where it is answered |
 | --- | --- |
 | What is fixed, and what broke in the first place | [`docs/history/`](docs/history/README.md) |
-| What is still open on security | [`SECURITY-TODO.md`](SECURITY-TODO.md) |
-| What is still open functionally | [`BUGS-TODO.md`](BUGS-TODO.md) |
+| What is still open, one file per item | [`docs/todo/`](docs/todo/README.md) |
+| The order to do it in | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 | The rules this code must not break | [`CLAUDE.md`](CLAUDE.md) and [`.claude/rules/`](.claude/rules) |
 | How a change came to be | `git log` — the history is part of the documentation |
 
@@ -57,7 +57,7 @@ The short version of what is left: the CSP still needs `unsafe-inline` and
 `unsafe-eval` until Tailwind, Alpine and Chart.js are vendored with a build
 step; rate limiting counts in one process until `RATE_LIMIT_STORAGE_URI` points
 at Redis; there is no audit trail for ordinary edits and no two-factor
-authentication; and the pre-deployment checklist in `SECURITY-TODO.md` is
+authentication; and the pre-deployment checklist in [`docs/todo/`](docs/todo/001-pre-deploy-checklist.md) is
 configuration nobody can do for you.
 
 ---
@@ -256,8 +256,9 @@ Brings up PostgreSQL, runs `alembic upgrade head`, serves the app on port 8000.
 Compose runs with `APP_ENV=production`, which refuses to start on development
 defaults — a missing or shipped `SECRET_KEY`, `DEBUG=true`, or `CORS_ORIGINS=*`
 all fail at boot rather than silently serving traffic. The interactive API docs
-are also disabled in production. See [`SECURITY-TODO.md`](SECURITY-TODO.md) for
-the full pre-deployment checklist.
+are also disabled in production. See
+[`docs/todo/001-pre-deploy-checklist.md`](docs/todo/001-pre-deploy-checklist.md)
+for the full pre-deployment checklist.
 
 Migrations, when you change a model:
 

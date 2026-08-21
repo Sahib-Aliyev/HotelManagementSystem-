@@ -1,6 +1,6 @@
 ---
 name: finding
-description: Close one open item from SECURITY-TODO.md or BUGS-TODO.md end to end - reproduce, fix in the owning layer, pin with a regression test, move the entry into docs/history, commit. Use when asked to fix, close or work off a listed finding, bug or security item.
+description: Close one open item from docs/todo/ end to end - reproduce, fix in the owning layer, pin with a regression test, move the entry into docs/history, commit. Use when asked to fix, close or work off a listed finding, bug or security item.
 ---
 
 # Close an open finding
@@ -10,10 +10,10 @@ Do not re-derive a rule here - open the file named and follow it.
 
 ## 1. Reproduce it and measure it
 
-Read the entry in `SECURITY-TODO.md` or `BUGS-TODO.md`, then reproduce the
-behaviour before changing anything: exact request, observed result, and the
-figure if there is one. The entries in `docs/history/` set the standard for what
-"measured" means - `docs/history/README.md` is the index.
+Read the item's file in `docs/todo/` - the index is `docs/todo/README.md` - then
+reproduce the behaviour before changing anything: exact request, observed
+result, and the figure if there is one. The entries in `docs/history/` set the
+standard for what "measured" means - `docs/history/README.md` is the index.
 
 State the reproduction back before moving on. If it cannot be reproduced, that
 is the finding: say so and stop.
@@ -35,14 +35,14 @@ placement: `.claude/rules/tests.md`, and `tests/CLAUDE.md` for the fixtures.
 Run the suite, not only the new test - the command is under **Commands** in
 `CLAUDE.md`.
 
-## 4. Move the entry out of the TODO file
+## 4. Move the item out of `docs/todo/`
 
-Delete it from `SECURITY-TODO.md` / `BUGS-TODO.md` and record it in
-`docs/history/fixed-bugs.md`, naming the test from step 3 - the contract is
-**Open work and history** in `CLAUDE.md`.
+Delete its file and record it in `docs/history/fixed-bugs.md`, naming the test
+from step 3 - the contract is **Open work and history** in `CLAUDE.md`.
 
-If the item was one of several under a heading, check whether the heading itself
-is now empty and should go too.
+Then fix what pointed at it: the table and the order in `docs/todo/README.md`,
+the stage in `docs/ROADMAP.md`, and any other item whose **Depends on** names
+the number. The number itself is retired, not reused.
 
 ## 5. Commit, then push
 

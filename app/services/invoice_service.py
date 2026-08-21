@@ -234,7 +234,7 @@ class InvoiceService:
         # Laying out a PDF is unbounded CPU with no await in it, so on the event
         # loop it stops every other request for as long as it takes — a trivial
         # denial of service for any authenticated user. A thread is the floor;
-        # a worker queue is the eventual answer (see BUGS-TODO.md).
+        # a worker queue is the eventual answer.
         await run_in_threadpool(doc.build, story)
         filename = f"{invoice.invoice_number}.pdf"
         return buffer.getvalue(), filename

@@ -1,29 +1,55 @@
 # Known limitations
 
-Open work lives in two separate files: **`SECURITY-TODO.md`** (security findings
-and the pre-deployment checklist) and **`BUGS-TODO.md`** (functional defects that
-are not security issues). What follows is limitations that are deliberately
-accepted.
+What this system deliberately does **not** do. Open work lives in `docs/todo/`,
+one file per item; the test that separates the two is whether there is a fix and
+a *done when*. If there is, it belongs there, not here.
+
+## Accepted
 
 - No email notifications, and only a single currency (`CURRENCY` in `.env`).
-- The CSP still allows `unsafe-inline` and `unsafe-eval`, because Tailwind,
-  Alpine and Chart.js load from CDNs and Tailwind compiles styles in the
-  browser. Vendoring those three files is what allows a strict CSP.
-- Rate limiting is per-IP with a per-account lockout on top
-  (`ACCOUNT_LOCK_AFTER_FAILURES`), and defaults to in-memory storage: behind a
-  proxy the real client IP must be forwarded, and more than one instance needs
-  `RATE_LIMIT_STORAGE_URI` pointed at Redis. The per-account counter is
-  in-process too, with the same caveat — it is bounded and expiring now, so it
-  cannot grow without limit, but two instances still keep separate counts.
 - **The no-double-booking constraint is PostgreSQL-only.** SQLite cannot express
   an exclusion constraint, so on SQLite the application-level check in
   `_assert_room_free` stands alone and a genuine write race is theoretically
   open — SQLite serialises writers, which mitigates it in practice. Treat
-  PostgreSQL as the supported deployment target for anything real.
-- No audit log, and it is the highest-value thing missing. Who took a payment
-  (`recorded_by_id`), who refunded it (the
-  counter-entry's `recorded_by_id`), who created a reservation
-  (`created_by_id`) and who waived a balance (`waived_by_id`) are recorded, but
-  there is no before/after trail for ordinary edits — a price change or a date
-  change is not attributed to anyone.
-- No two-factor authentication.
+  PostgreSQL as the supported deployment target for anything real. This is one of
+  the invariants indexed in `CLAUDE.md`.
+
+## Decided against, with the trigger that would reopen it
+
+Recorded so the next reader knows these were considered rather than missed. None
+is a defect; each is a decision waiting for one specific thing to happen.
+
+### Explicit inventory (`room_nights`) instead of derived overlap
+
+Availability is derived on every read by scanning reservations for date overlap.
+The PostgreSQL exclusion constraint makes that *correct* under concurrency, which
+was the urgent part. A materialised `room_nights(room_id, night)` table would
+additionally give O(1) availability lookups, work identically on SQLite, and
+provide the natural home for per-night rates, allotments and deliberate
+overbooking.
+
+**Trigger:** the first of those features — `docs/todo/011-rate-plans.md` or
+`docs/todo/013-deliberate-overbooking.md`. Seasonal rates force this model
+anyway, so do it then rather than twice.
+
+### `property_id` / multi-tenancy
+
+There is no `property_id` anywhere; the schema describes exactly one hotel. That
+is the right shape for what this is, and it is worth *deciding* about before the
+schema calcifies, because adding it later touches every table and every query.
+
+**Trigger:** any suggestion that a second property might exist.
+
+### Transaction boundaries live in the services
+
+Every service method calls `self.db.commit()`, so a router cannot compose two
+service calls atomically. The walk-in flow already composes two — a guest is
+registered and committed, then the reservation is created — which is where this
+is felt first: a walk-in that loses the room to a conflict leaves the guest
+registered with no booking. Tolerable, because the guest record is reused on the
+next attempt.
+
+**Trigger:** the first flow where a partial result is *not* tolerable — check out
+*and* issue the invoice as a single unit, say, or a group check-in
+(`docs/todo/014-group-bookings.md`). The conventional answer is a unit-of-work
+dependency that commits once per request.

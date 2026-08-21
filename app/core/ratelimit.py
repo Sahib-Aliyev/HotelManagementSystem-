@@ -57,7 +57,8 @@ class FailedLoginTracker:
 
     In-process, like the limiter itself, and with the same limitation: a second
     instance keeps its own counters. Moving both to Redis is tracked in
-    `SECURITY-TODO.md` — that fixes the sharing; this fixes the growth.
+    `docs/todo/004-redis-shared-counters.md` fixes the sharing; this fixes the
+    growth.
     """
 
     def __init__(

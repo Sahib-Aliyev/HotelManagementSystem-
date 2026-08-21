@@ -1,110 +1,78 @@
 # Route to production
 
-What stands between "runs in `docker compose`" and "a hotel could use this",
-ordered by what would hurt most on the first real night rather than by how
-interesting it is. Each stage names its own *done when*, so it can be closed
-rather than admired.
+What stands between "runs in `docker compose`" and "a hotel could use this", in
+the order that limits the damage of a first real night rather than the order that
+is most interesting to build.
 
-Open defects live in `SECURITY-TODO.md` and `BUGS-TODO.md`; accepted limitations
-in `docs/LIMITATIONS.md`. This file is only the sequence.
+**This file is only the sequence and the reasoning behind it.** Each item is
+described in exactly one place, `docs/todo/`, and named here by number; accepted
+limitations are in `docs/LIMITATIONS.md`.
 
 ## Stage 0 — the things whose absence is unrecoverable
 
-1. **Backups and a tested restore.** PostgreSQL lives in a named volume with no
-   dump schedule and no restore procedure, and this is tracked in neither TODO
-   file. A hotel losing its folio history is an incident, not a bug. Nightly
-   `pg_dump` to off-host storage, 7 daily plus 4 weekly, and a restore drill
-   written down in `docs/runbook.md`.
-   *Done when:* a restore into a scratch database reproduces the reservation and
-   payment counts, and the drill has actually been run once.
-2. **TLS and a reverse proxy.** `docker-compose.yml` publishes 8000 directly. The
-   session cookie only gets its `secure` flag and HSTS only means anything over
-   HTTPS. Put Caddy or nginx in front, terminate TLS, and pass
-   `--forwarded-allow-ips=<proxy>` so the rate limiter sees real client
-   addresses instead of throttling the whole hotel as one.
-   *Done when:* HTTPS serves, HTTP redirects, and two client IPs get two
-   independent rate-limit buckets.
-3. **Walk the pre-deploy checklist** in `SECURITY-TODO.md` §1 — it is already
-   written. Open boxes: `SECRET_KEY`, `CORS_ORIGINS`, HTTPS,
-   `--forwarded-allow-ips`, `RATE_LIMIT_STORAGE_URI`, `alembic upgrade head`,
-   `POSTGRES_PASSWORD`, and never running `seed.py` against production.
+**015** backups and a tested restore · **016** TLS and a reverse proxy · **001**
+the pre-deployment checklist
+
+Losing the folio history is an incident rather than a bug, and it is the only
+failure on this whole list that cannot be repaired afterwards — so it goes first,
+before anything that merely makes the system better. TLS is next because the
+session cookie and the rate limiter are both wrong without it, and the checklist
+is last of the three because it is the manual half of the other two.
 
 ## Stage 1 — being able to see what happened
 
-4. **Request IDs and structured logs.** Today a 500 in production leaves a stack
-   trace with nothing tying it to a user, a reservation or a request. Middleware
-   that stamps an id, logs one JSON line per request (method, path, status,
-   duration, user id, request id) and returns the id in the error body so a
-   receptionist can quote it.
-   *Done when:* a deliberately broken request is findable in the logs by the id
-   shown on screen.
-5. **Error tracking and an uptime check.** Sentry or equivalent for exceptions;
-   an external monitor on `/health`, which already answers 503 when the database
-   is unreachable.
-   *Done when:* stopping the database container produces both a 503 and an alert.
+**017** request IDs and structured logs · **018** error tracking and an uptime
+check
 
-## Stage 2 — the audit log
+Everything after this stage is easier to diagnose and harder to get wrong once a
+failure can be traced from a screen to a log line. Doing it before the larger
+changes is what makes them debuggable.
 
-6. The highest-value missing piece, named in `SECURITY-TODO.md` §4 and
-   `BUGS-TODO.md`, and the reason three findings (cancelling a stay, refunding a
-   payment, waiving a balance) were worse than they had to be. Attribution
-   exists wherever money moves — `created_by_id`, `recorded_by_id`,
-   `waived_by_id` — but there is no before/after trail for ordinary edits: a
-   price change or a date change is attributed to nobody. One table
-   (`actor, action, object, before, after, at`), written from the service layer,
-   which is already the single choke point every write passes through.
-   *Done when:* changing a rate, a date and a room each leave a row, and a stay
-   can show who changed what.
+## Stage 2 — the two cheap security holes
 
-## Stage 3 — more than one process
+**004** one shared store for both rate-limit counters · **006** a shorter token
+lifetime
 
-7. **Redis for both counters.** `RATE_LIMIT_STORAGE_URI` already exists for the
-   per-IP limiter; `FailedLoginTracker` needs the same treatment and must keep
-   answering a locked address exactly as it answers a wrong password, or it
-   becomes the account-enumeration oracle the identical login message exists to
-   prevent.
-   *Done when:* two workers share one lockout — locking through one and being
-   refused by the other.
-8. **Then run two workers** behind the Stage 0 proxy and re-run
-   `tests/test_double_booking_pg.py` against the real deployment. The exclusion
-   constraint is what makes concurrency safe, so prove it in situ rather than
-   trusting the single-process case.
+Hours of work each. They sit here rather than in Stage 0 because neither is
+exploitable on a single instance behind a proxy — but both get quietly worse the
+moment the deployment grows, which is exactly when nobody is looking at them.
+
+## Stage 3 — the audit log
+
+**005**
+
+The highest-value missing piece, for the reasons its own file gives. It is also
+what **010** needs before a room move can record what it did.
 
 ## Stage 4 — close the CSP hole properly
 
-9. **Move the Alpine components out of `<script>` blocks** into
-   `app/static/js/pages/*.js`. `BUGS-TODO.md` records the dependency:
-   `unsafe-inline` cannot leave `script-src` while the components live in the
-   HTML. They also become lintable and testable for the first time — the last
-   three UI defects were all in that code.
-10. **Vendor Tailwind (the CLI build, not the CDN), Alpine's CSP build and
-    Chart.js**, then tighten to `script-src 'self'` and `style-src 'self'`.
-    *Done when:* no CSP violations in the console, and `tests/test_security.py`
-    asserts the header carries no `unsafe-*`.
+**003** move the Alpine components out of the templates, then **002** vendor the
+three libraries and tighten the header
 
-## Stage 5 — what a hotel asks for next
+In that order: the header cannot lose `unsafe-inline` while the components live in
+the HTML. 003 pays for itself anyway — the last three UI defects were all in code
+no tool could see.
 
-In the value order already scoped under "Product gaps" in `BUGS-TODO.md`:
+## Stage 5 — hygiene, then hardening
 
-- **Room move and stay extension as first-class operations.** The two most
-  common front-desk actions after check-in, today done by `PATCH`-ing `room_id`
-  or `check_out_date`, which silently re-prices and records nothing.
-- **Rate plans.** `nightly_rate` is one number per booking, so seasonality means
-  a manager overriding by hand — which is most of why the manager-only rate
-  override exists at all.
-- **Cancellation policy and deposits.** Every cancellation is currently free.
-- **Email notifications.** Confirmation and receipt: the one integration a guest
-  actually notices.
+**007** replace `passlib` · **008** a lock file with hashes · **009** two-factor
+authentication · **019** a load test of the front-desk flow
 
-## Cross-cutting hygiene
+007 and 008 are worth folding into any change that touches dependencies. 019
+needs a real deployment to measure, so it follows Stage 0.
 
-- **A lock file with hashes** (`uv` or `pip-tools`). `requirements.txt` pins
-  direct dependencies but not transitive ones; `pip-audit` already runs in CI.
-- **Replace `passlib`** — unmaintained, and the reason `bcrypt` is pinned to
-  4.0.1.
-- **Shorten `ACCESS_TOKEN_EXPIRE_MINUTES`** from 720. Sign-out revokes properly
-  now, but a front-desk shift is not twelve hours long.
-- **A load test of the front-desk flow**, so the threadpool fix and the N+1 work
-  have numbers attached rather than claims.
-- **State the test count in one place, or not at all** — `README.md` currently
-  says 98 in one place and 134 in another.
+## Stage 6 — what a hotel asks for next
+
+**010** room move and stay extension · **011** rate plans · **012** cancellation
+policy and deposits · **013** deliberate overbooking · **014** group bookings
+
+In value order. Each file names the trigger that should start it, and two of them
+first force the explicit-inventory decision recorded in `docs/LIMITATIONS.md`.
+
+## Not in this sequence
+
+- **Email notifications.** The one integration a guest actually notices, and an
+  accepted absence today — `docs/LIMITATIONS.md`.
+- **The test count in `README.md`** is stated twice and wrong both times; that
+  and eighteen other consistency findings are in `docs/CLEANUP-BRIEF.md`, which
+  is a one-session work order rather than part of this route.

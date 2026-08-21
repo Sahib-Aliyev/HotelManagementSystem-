@@ -121,9 +121,9 @@ These came out of the security audit. Breaking one breaks a test in
 ## Language rule
 
 **Everything written down in this repository is in English** — without
-exception. That covers every `*.md` file (this one, `README.md`,
-`SECURITY-TODO.md`, `BUGS-TODO.md`), every commit message, and every comment
-and docstring in the code. Commits before `2026-08-19` are in Azerbaijani;
+exception. That covers every `*.md` file (this one, `README.md`, everything
+under `docs/`), every commit message, and every comment and docstring in the
+code. Commits before `2026-08-19` are in Azerbaijani;
 that is history, not a precedent — do not add more.
 
 ## Git / commit rule
@@ -171,16 +171,21 @@ that owns its area rather than restating it here.
 
 ## Open work and history
 
-- Security findings and the pre-deployment checklist: `SECURITY-TODO.md`
-- Functional defects, and decisions deliberately not taken: `BUGS-TODO.md`
-- Limitations that are accepted rather than open: `docs/LIMITATIONS.md`
-- The sequence from here to a production deployment: `docs/ROADMAP.md`
+- Every open item, one file each, with the order to do them in:
+  `docs/todo/` — start at `docs/todo/README.md`
+- Limitations that are accepted rather than open, and the decisions taken
+  against with the trigger that would reopen them: `docs/LIMITATIONS.md`
+- The sequence from here to a production deployment, by item number:
+  `docs/ROADMAP.md`
+- The consistency findings of 2026-08-21, as a one-session work order:
+  `docs/CLEANUP-BRIEF.md` (delete it, and this line, when it is done)
 - The hooks and skills that exist, the two skills still worth writing, and the
   rule files both must link to rather than restate: `docs/AGENT-AUTOMATION.md`
 - How each fixed bug happened, with the reproductions and the measured figures:
   `docs/history/` — start at `docs/history/README.md`
-- When an item is finished, delete it from the TODO file and record it in
+- When an item is finished, delete its file from `docs/todo/` and record it in
   `docs/history/fixed-bugs.md` with the regression test that keeps it fixed.
+  `/finding` walks that procedure.
 
 <!-- Do not add `@path` imports to this file. Imports expand at launch, so
      importing the rule files or the history would put all 753 original lines

@@ -15,3 +15,16 @@ the way, which is the part a diff cannot tell you.
 Read it when you are about to change money, booking or room-status code, or
 when a rule in `.claude/rules/` looks arbitrary and you want to know what it
 cost to learn. `git log` is the other half of the same record.
+
+## Confirmed clean
+
+The review of 2026-08-17 also checked, and cleared, a list of things it found
+nothing wrong with: mass assignment (all 30 handlers), role coverage, SQL
+injection (no `text()`, no f-string SQL), XSS (no `|safe`; both `x-html`
+bindings read hard-coded icon constants), path traversal, SSRF, error-handler
+leakage, cookie flags, the overlap and overbooking logic, `Decimal` money
+precision, and PII scoping in `GuestSummary`.
+
+Those need no work. Do not re-audit them without a reason — and if one is
+re-audited anyway, say so here rather than leaving the next reader to wonder
+whether the list is still true.
